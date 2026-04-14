@@ -11,8 +11,10 @@ from app.models import (
 from app.services.user_service import validate_gender
 from app.services.match_service import get_user_description_by_phone
 
+
 def get_user_by_phone(phone_number: str):
     return User.query.filter_by(phone_number=phone_number).first()
+
 
 def parse_age_range(age_range_text: str):
     parts = age_range_text.split("-")
@@ -31,8 +33,24 @@ def parse_age_range(age_range_text: str):
     return min_age, max_age, None
 
 
-def create_temp_phone(user_id: int) -> str:
-    return f"TEMP_{user_id}"
+def serialize_match_user(matched_user):
+    return {
+        "name": matched_user.name,
+        "age": matched_user.age,
+        "phone_number": matched_user.phone_number,
+    }
+
+
+def build_match_list(user, age_range_min: int, age_range_max: int, county: str):
+    opposite_gender = "Female" if user.gender == "Male" else "Male"
+
+    return User.query.filter(
+        User.id != user.id,
+        User.age >= age_range_min,
+        User.age <= age_range_max,
+        User.county == county,
+        User.gender == opposite_gender,
+    ).all()
 
 
 def handle_start_command(sender: str, message: str):
@@ -41,7 +59,7 @@ def handle_start_command(sender: str, message: str):
     if existing_user:
         return {
             "message": (
-                f"You are already registered as {existing_user.name}. "
+                f"You are already registered as {existing_user.name}.\n"
                 f"To search for a match, SMS match#ageRange#county."
             ),
             "user_id": existing_user.id,
@@ -86,8 +104,9 @@ def handle_start_command(sender: str, message: str):
 
     return {
         "message": (
-            f"Your profile has been created successfully {user.name}. "
-            f"SMS details#levelOfEducation#profession#maritalStatus#religion#ethnicity to continue."
+            f"Welcome to PENZI, {user.name}! \n"
+            "Your profile has been created successfully.\n"
+            "SMS details#levelOfEducation#profession#maritalStatus#religion#ethnicity to continue."
         ),
         "user_id": user.id,
         "user": user.to_dict(),
@@ -100,8 +119,11 @@ def handle_details_command(user_id: int, message: str):
         return {"error": "User not found"}, 404
 
     parts = message.split("#")
+
     if len(parts) != 6:
-        return {"error": "Invalid details format. Use details#education#profession#maritalStatus#religion#ethnicity"}, 400
+        return {
+            "error": "Invalid details format. Use details#education#profession#maritalStatus#religion#ethnicity"
+        }, 400
 
     _, education_level, profession, marital_status, religion, ethnicity = parts
 
@@ -125,7 +147,10 @@ def handle_details_command(user_id: int, message: str):
     db.session.commit()
 
     return {
-        "message": "This is the last stage of registration. SMS your self description starting with the word MYSELF.",
+        "message": (
+            "This is the last stage of registration.\n"
+            "SMS your self description starting with the word MYSELF."
+        ),
         "user_id": user_id,
         "details": details.to_dict(),
     }, 201
@@ -156,30 +181,13 @@ def handle_myself_command(user_id: int, message: str):
     db.session.commit()
 
     return {
-        "message": "You are now registered for dating. To search for a match, SMS match#ageRange#county.",
+        "message": (
+            "You are now registered for dating.\n"
+            "To search for a match, SMS match#ageRange#county."
+        ),
         "user_id": user_id,
         "description": description.to_dict(),
     }, 201
-
-
-def build_match_list(user, age_range_min: int, age_range_max: int, county: str):
-    opposite_gender = "Female" if user.gender == "Male" else "Male"
-
-    return User.query.filter(
-        User.id != user.id,
-        User.age >= age_range_min,
-        User.age <= age_range_max,
-        User.county == county,
-        User.gender == opposite_gender
-    ).all()
-
-
-def serialize_match_user(matched_user):
-    return {
-        "name": matched_user.name,
-        "age": matched_user.age,
-        "phone_number": matched_user.phone_number,
-    }
 
 
 def handle_match_command(user_id: int, message: str):
@@ -188,6 +196,7 @@ def handle_match_command(user_id: int, message: str):
         return {"error": "User not found"}, 404
 
     parts = message.split("#")
+
     if len(parts) != 3:
         return {"error": "Invalid match format. Use match#ageRange#county"}, 400
 
@@ -226,8 +235,23 @@ def handle_match_command(user_id: int, message: str):
 
     db.session.commit()
 
+    if not response_matches:
+        return {
+            "message": "Sorry, we did not find any match for your choice yet."
+        }, 200
+
+    matches_text = "\n".join(
+        [f"{m['name']} aged {m['age']}, {m['phone_number']}" for m in response_matches]
+    )
+
+    next_text = "\nSend NEXT to receive more matches." if len(matches) > 3 else ""
+
     return {
-        "message": f"We have {len(matches)} matches for your choice.",
+        "message": (
+            f"We have {len(matches)} matches for your choice!\n"
+            f"{matches_text}"
+            f"{next_text}"
+        ),
         "match_request_id": match_request.id,
         "matches": response_matches,
         "next_instruction": "Send NEXT to receive more matches." if len(matches) > 3 else None,
@@ -270,8 +294,15 @@ def handle_next_command(user_id: int):
 
     db.session.commit()
 
+    if not response_matches:
+        return {"message": "No more matches available for now."}, 200
+
+    matches_text = "\n".join(
+        [f"{m['name']} aged {m['age']}, {m['phone_number']}" for m in response_matches]
+    )
+
     return {
-        "message": "Next matches retrieved successfully",
+        "message": f"{matches_text}\nSend NEXT to receive more matches.",
         "match_request_id": match_request.id,
         "matches": response_matches,
     }, 200
@@ -284,7 +315,14 @@ def handle_describe_command(message: str):
         return {"error": "Invalid DESCRIBE format. Use DESCRIBE <phone_number>"}, 400
 
     phone_number = parts[1].strip()
-    return get_user_description_by_phone(phone_number)
+    result, status_code = get_user_description_by_phone(phone_number)
+
+    if status_code != 200:
+        return result, status_code
+
+    return {
+        "message": result["description"]
+    }, 200
 
 
 def handle_phone_interest_command(user_id: int, message: str):
@@ -320,8 +358,19 @@ def handle_phone_interest_command(user_id: int, message: str):
 
     target_details = UserDetails.query.filter_by(user_id=target.id).first()
 
+    details_text = ""
+    if target_details:
+        details_text = (
+            f", {target_details.education_level}, {target_details.profession}, "
+            f"{target_details.marital_status}, {target_details.religion}, {target_details.ethnicity}"
+        )
+
     return {
-        "message": "Interest request created successfully",
+        "message": (
+            f"Interest sent\n"
+            f"We have notified {target.name}.\n"
+            f"You will receive their details if they accept."
+        ),
         "interest_request_id": interest_request.id,
         "requested_profile": {
             "name": target.name,
@@ -332,11 +381,14 @@ def handle_phone_interest_command(user_id: int, message: str):
             "details": target_details.to_dict() if target_details else None,
         },
         "notify_target": {
-            "message": f"Hi {target.name}, {requester.name} is interested in you. Reply YES to receive their details.",
-            "target_user_id": target.id,
+            "to": target.phone_number,
+            "message": (
+                f"Hi {target.name},\n"
+                f"{requester.name} is interested in you.\n"
+                f"Reply YES to receive their details."
+            )
         }
     }, 201
-
 
 def handle_yes_command(user_id: int):
     responder = db.session.get(User, user_id)
@@ -372,17 +424,20 @@ def handle_yes_command(user_id: int):
     requester = db.session.get(User, interest_request.requester_user_id)
     requester_details = UserDetails.query.filter_by(user_id=requester.id).first()
 
+    details_text = ""
+    if requester_details:
+        details_text = (
+            f", {requester_details.education_level}, {requester_details.profession}, "
+            f"{requester_details.marital_status}, {requester_details.religion}, {requester_details.ethnicity}"
+        )
+
     return {
-        "message": "Consent recorded successfully",
-        "interest_request_id": interest_request.id,
-        "requester_profile": {
-            "name": requester.name,
-            "age": requester.age,
-            "county": requester.county,
-            "town": requester.town,
-            "phone_number": requester.phone_number,
-            "details": requester_details.to_dict() if requester_details else None,
-        }
+        "message": (
+            f"Congratulations! \n"
+            f"You have a new match:\n"
+            f"{requester.name},{requester.phone_number}\n"
+            f"Feel free to connect!"
+        )
     }, 200
 
 
@@ -392,59 +447,50 @@ def process_sms_command(sender: str | None, message: str):
 
     message = message.strip()
 
-    # ✅ PENZI entry point (no registration required)
     if message.upper() == "PENZI":
         return {
             "message": (
-                "Welcome to our dating service with 6000 potential dating partners! "
-                "To register SMS start#name#age#gender#county#town. "
-                "Example: start#John Doe#26#Male#Nakuru#Naivasha"
+                "Welcome to PENZI! \n"
+                "We have over 6000 potential matches for you.\n"
+                "To register, SMS:\n"
+                "start#name#age#gender#county#town\n"
+                "Example:\n"
+                "start#John Doe#26#Male#Nakuru#Naivasha"
             )
         }, 200
 
-    # ✅ START registration (allowed without existing account)
     if message.lower().startswith("start#"):
         return handle_start_command(sender, message)
 
-    # 🚫 Everything below requires registration
     if not sender:
         return {"error": "Sender is required"}, 400
 
     user = get_user_by_phone(sender)
 
     if not user:
-        return {
-            "message": "You are not registered. Send PENZI to start."
-        }, 404
+        return {"message": "You are not registered. Send PENZI to start."}, 404
 
     user_id = user.id
 
-    # ✅ DETAILS
     if message.lower().startswith("details#"):
         return handle_details_command(user_id, message)
 
-    # ✅ MYSELF
     if message.upper().startswith("MYSELF"):
         return handle_myself_command(user_id, message)
 
-    # ✅ MATCH
     if message.lower().startswith("match#"):
         return handle_match_command(user_id, message)
 
-    # ✅ NEXT
     if message.upper() == "NEXT":
         return handle_next_command(user_id)
 
-    # ✅ DESCRIBE
     if message.upper().startswith("DESCRIBE "):
         return handle_describe_command(message)
 
-    # ✅ YES (consent)
     if message.upper() == "YES":
         return handle_yes_command(user_id)
 
-    # ✅ PHONE NUMBER → interest request
-    if message.strip().isdigit() or message.strip().startswith("07") or message.strip().startswith("01"):
+    if message.strip().isdigit() or message.strip().startswith("07") or message.strip().startswith("01") or message.strip().startswith("254"):
         return handle_phone_interest_command(user_id, message)
 
     return {"error": "Unknown SMS command"}, 400
