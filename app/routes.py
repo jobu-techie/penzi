@@ -1,4 +1,4 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 
 from app.sms_handler import process_sms
 from app.services.interest_service import (
@@ -9,6 +9,11 @@ from app.services.match_service import (
     create_match_request,
     get_next_matches,
     get_user_description_by_phone,
+)
+from app.services.onfon_service import (
+    extract_onfon_payload,
+    normalize_phone_number,
+    send_onfon_sms,
 )
 from app.services.user_service import (
     create_user,
@@ -24,6 +29,11 @@ bp = Blueprint("routes", __name__)
 @bp.route("/", methods=["GET"])
 def home():
     return jsonify({"message": "Penzi API is running"}), 200
+
+
+@bp.route("/health", methods=["GET"])
+def health():
+    return jsonify({"status": "ok"}), 200
 
 
 @bp.route("/users", methods=["GET"])
@@ -44,6 +54,9 @@ def register():
 
     if not data:
         return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    if "phone_number" in data:
+        data["phone_number"] = normalize_phone_number(data["phone_number"])
 
     result, status_code = create_user(data)
     return jsonify(result), status_code
@@ -90,7 +103,7 @@ def next_matches(match_request_id):
 
 @bp.route("/describe/<phone_number>", methods=["GET"])
 def describe_user(phone_number):
-    result, status_code = get_user_description_by_phone(phone_number)
+    result, status_code = get_user_description_by_phone(normalize_phone_number(phone_number))
     return jsonify(result), status_code
 
 
@@ -100,6 +113,9 @@ def create_interest():
 
     if not data:
         return jsonify({"error": "Request body must be valid JSON"}), 400
+
+    if "target_phone_number" in data:
+        data["target_phone_number"] = normalize_phone_number(data["target_phone_number"])
 
     result, status_code = create_interest_request(data)
     return jsonify(result), status_code
@@ -116,32 +132,30 @@ def respond_to_interest():
     return jsonify(result), status_code
 
 
-@bp.route("/sms", methods=["POST"])
-def handle_sms():
-    data = request.get_json(silent=True)
-
-    if not data:
-        return jsonify({"error": "Request body must be valid JSON"}), 400
-
-    message = data.get("message")
-    user_id = data.get("user_id")
-
-    result, status_code = process_sms(user_id, message)
-    return jsonify(result), status_code
-
-
 @bp.route("/webhook/onfon", methods=["POST"])
 def onfon_webhook():
-    data = request.get_json(silent=True)
+    # Optional shared-secret protection
+    expected_token = current_app.config.get("ONFON_WEBHOOK_TOKEN")
+    incoming_token = (
+        request.headers.get("X-Webhook-Token")
+        or request.headers.get("Authorization", "").replace("Bearer ", "")
+    )
+
+    if expected_token and incoming_token != expected_token:
+        return "Unauthorized", 401, {"Content-Type": "text/plain; charset=utf-8"}
+
+    # Accept JSON or form-encoded payloads
+    data = request.get_json(silent=True) or request.form.to_dict()
 
     if not data:
-        return jsonify({"error": "Invalid request"}), 400
+        return "Invalid request", 400, {"Content-Type": "text/plain; charset=utf-8"}
 
-    sender = data.get("sender")
-    message = data.get("message")
+    sender, message, shortcode = extract_onfon_payload(data)
 
     if not sender or not message:
-        return jsonify({"error": "sender and message are required"}), 400
+        return "sender and message are required", 400, {
+            "Content-Type": "text/plain; charset=utf-8"
+        }
 
     result, status_code = process_sms(sender, message)
 
@@ -152,4 +166,23 @@ def onfon_webhook():
     else:
         sms_text = str(result)
 
-    return sms_text, status_code, {"Content-Type": "text/plain; charset=utf-8"}
+    reply_mode = current_app.config.get("ONFON_REPLY_MODE", "direct")
+
+    # Mode 1: return text directly for gateway relay
+    if reply_mode == "direct":
+        return sms_text, status_code, {"Content-Type": "text/plain; charset=utf-8"}
+
+    # Mode 2: actively send SMS through Onfon MT API
+    if reply_mode == "send_api":
+        try:
+            send_onfon_sms(sender, sms_text)
+        except Exception:
+            current_app.logger.exception("Failed to send outbound SMS via Onfon API")
+            return "Failed to send outbound SMS", 502, {
+                "Content-Type": "text/plain; charset=utf-8"
+            }
+
+        # If provider only needs an ACK on webhook receipt
+        return "OK", 200, {"Content-Type": "text/plain; charset=utf-8"}
+
+    return "Invalid ONFON_REPLY_MODE", 500, {"Content-Type": "text/plain; charset=utf-8"}
