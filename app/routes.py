@@ -31,6 +31,27 @@ from app.models import (
 
 bp = Blueprint("routes", __name__)
 
+@bp.route("/webhook/onfon", methods=["POST"])
+def onfon_webhook():
+    data = request.get_json(silent=True)
+
+    if not data:
+        return jsonify({"error": "Invalid request"}), 400
+
+    sender = data.get("sender")
+    message = data.get("message")
+
+    if not sender or not message:
+        return jsonify({"error": "sender and message are required"}), 400
+
+    result, status_code = process_sms(sender, message)
+
+    if isinstance(result, dict):
+        sms_text = result.get("message", "Request processed.")
+    else:
+        sms_text = str(result)
+
+    return sms_text, status_code, {"Content-Type": "text/plain; charset=utf-8"}
 
 @bp.route("/", methods=["GET"])
 def home():
@@ -183,4 +204,12 @@ def handle_sms():
     user_id = data.get("user_id")
 
     result, status_code = process_sms(user_id, message)
-    return jsonify(result), status_code
+
+    return jsonify({
+        "from": "User",
+        "to": "Onfon",
+        "incoming_message": message,
+        "reply_from": "Onfon",
+        "reply_to": "User",
+        "response": result,
+    }), status_code

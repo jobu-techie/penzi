@@ -11,6 +11,8 @@ from app.models import (
 from app.services.user_service import validate_gender
 from app.services.match_service import get_user_description_by_phone
 
+def get_user_by_phone(phone_number: str):
+    return User.query.filter_by(phone_number=phone_number).first()
 
 def parse_age_range(age_range_text: str):
     parts = age_range_text.split("-")
@@ -33,11 +35,25 @@ def create_temp_phone(user_id: int) -> str:
     return f"TEMP_{user_id}"
 
 
-def handle_start_command(message: str):
+def handle_start_command(sender: str, message: str):
+    existing_user = User.query.filter_by(phone_number=sender).first()
+
+    if existing_user:
+        return {
+            "message": (
+                f"You are already registered as {existing_user.name}. "
+                f"To search for a match, SMS match#ageRange#county."
+            ),
+            "user_id": existing_user.id,
+            "user": existing_user.to_dict(),
+        }, 200
+
     parts = message.split("#")
 
     if len(parts) != 6:
-        return {"error": "Invalid start format. Use start#name#age#gender#county#town"}, 400
+        return {
+            "error": "Invalid start format. Use start#name#age#gender#county#town"
+        }, 400
 
     _, name, age_text, gender_text, county, town = parts
 
@@ -62,18 +78,17 @@ def handle_start_command(message: str):
         gender=gender.value,
         county=county.strip(),
         town=town.strip(),
-        phone_number="TEMP_PHONE",
+        phone_number=sender,
     )
 
     db.session.add(user)
     db.session.commit()
 
-    user.phone_number = create_temp_phone(user.id)
-    db.session.commit()
-
     return {
-        "message": f"Your profile has been created successfully {user.name}. "
-                   f"SMS details#levelOfEducation#profession#maritalStatus#religion#ethnicity to continue.",
+        "message": (
+            f"Your profile has been created successfully {user.name}. "
+            f"SMS details#levelOfEducation#profession#maritalStatus#religion#ethnicity to continue."
+        ),
         "user_id": user.id,
         "user": user.to_dict(),
     }, 201
@@ -371,36 +386,64 @@ def handle_yes_command(user_id: int):
     }, 200
 
 
-def process_sms_command(user_id: int | None, message: str):
+def process_sms_command(sender: str | None, message: str):
     if not message or not message.strip():
         return {"error": "Message cannot be empty"}, 400
 
     message = message.strip()
 
+    # ✅ PENZI entry point (no registration required)
+    if message.upper() == "PENZI":
+        return {
+            "message": (
+                "Welcome to our dating service with 6000 potential dating partners! "
+                "To register SMS start#name#age#gender#county#town. "
+                "Example: start#John Doe#26#Male#Nakuru#Naivasha"
+            )
+        }, 200
+
+    # ✅ START registration (allowed without existing account)
     if message.lower().startswith("start#"):
-        return handle_start_command(message)
+        return handle_start_command(sender, message)
 
-    if user_id is None:
-        return {"error": "user_id is required for this command"}, 400
+    # 🚫 Everything below requires registration
+    if not sender:
+        return {"error": "Sender is required"}, 400
 
+    user = get_user_by_phone(sender)
+
+    if not user:
+        return {
+            "message": "You are not registered. Send PENZI to start."
+        }, 404
+
+    user_id = user.id
+
+    # ✅ DETAILS
     if message.lower().startswith("details#"):
         return handle_details_command(user_id, message)
 
+    # ✅ MYSELF
     if message.upper().startswith("MYSELF"):
         return handle_myself_command(user_id, message)
 
+    # ✅ MATCH
     if message.lower().startswith("match#"):
         return handle_match_command(user_id, message)
 
+    # ✅ NEXT
     if message.upper() == "NEXT":
         return handle_next_command(user_id)
 
+    # ✅ DESCRIBE
     if message.upper().startswith("DESCRIBE "):
         return handle_describe_command(message)
 
+    # ✅ YES (consent)
     if message.upper() == "YES":
         return handle_yes_command(user_id)
 
+    # ✅ PHONE NUMBER → interest request
     if message.strip().isdigit() or message.strip().startswith("07") or message.strip().startswith("01"):
         return handle_phone_interest_command(user_id, message)
 
