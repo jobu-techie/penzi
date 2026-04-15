@@ -5,6 +5,15 @@ from app.services.interest_service import (
     create_interest_request,
     record_consent_response,
 )
+from app.models import SmsLog, SmsOutbox
+from app.services.onfon_service import (
+    extract_onfon_payload,
+    normalize_phone_number,
+    send_onfon_sms,
+    log_incoming_sms,
+    log_outgoing_sms,
+    queue_sms,
+)
 from app.services.match_service import (
     create_match_request,
     get_next_matches,
@@ -156,6 +165,7 @@ def onfon_webhook():
         return "sender and message are required", 400, {
             "Content-Type": "text/plain; charset=utf-8"
         }
+    log_incoming_sms(sender, shortcode, message)
 
     result, status_code = process_sms(sender, message)
 
@@ -170,6 +180,12 @@ def onfon_webhook():
 
     # Mode 1: return text directly for gateway relay
     if reply_mode == "direct":
+        log_outgoing_sms(
+            sender,
+            sms_text,
+            sender_id=current_app.config.get("ONFON_SENDER-ID", "22141"),
+            status="sent",
+        )
         return sms_text, status_code, {"Content-Type": "text/plain; charset=utf-8"}
 
     # Mode 2: actively send SMS through Onfon MT API
@@ -186,3 +202,14 @@ def onfon_webhook():
         return "OK", 200, {"Content-Type": "text/plain; charset=utf-8"}
 
     return "Invalid ONFON_REPLY_MODE", 500, {"Content-Type": "text/plain; charset=utf-8"}
+
+@bp.route("/sms/logs", methods=["GET"])
+def get_sms_logs():
+    logs = SmsLog.query.order_by(SmsLog.id.desc()).all()
+    return jsonify([log.to_dict() for log in logs]), 200
+
+
+@bp.route("/sms/outbox", methods=["GET"])
+def get_sms_outbox():
+    items = SmsOutbox.query.order_by(SmsOutbox.id.desc()).all()
+    return jsonify([item.to_dict() for item in items]), 200

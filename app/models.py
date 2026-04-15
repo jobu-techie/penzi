@@ -114,3 +114,46 @@ class ConsentResponse(db.Model):
     responder_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     response = db.Column(db.String(10), nullable=False)
     created_at = db.Column(db.DateTime)
+class SmsLog(db.Model):
+    __tablename__ = "sms_logs"
+
+    id = db.Column(db.Integer, primary_key=True)
+    direction = db.Column(db.String(10), nullable=False)
+    sender = db.Column(db.String(20), nullable=False)
+    recipient = db.Column(db.String(20), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    shortcode = db.Column(db.String(20))
+    status = db.Column(db.String(20), default="received")
+    created_at = db.Column(db.DateTime)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "direction": self.direction,
+            "sender": self.sender,
+            "recipient": self.recipient,
+            "message": self.message,
+            "shortcode": self.shortcode,
+            "status": self.status,
+        }
+
+
+class SmsOutbox(db.Model):
+    __tablename__ = "sms_outbox"
+
+    id = db.Column(db.Integer, primary_key=True)
+    recipient = db.Column(db.String(20), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    sender_id = db.Column(db.String(20), default="22141")
+    status = db.Column(db.String(20), default="pending")
+    created_at = db.Column(db.DateTime)
+    sent_at = db.Column(db.DateTime)
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "recipient": self.recipient,
+            "message": self.message,
+            "sender_id": self.sender_id,
+            "status": self.status,
+        }

@@ -11,7 +11,7 @@ from app.models import (
 from app.services.user_service import validate_gender
 from app.services.match_service import get_user_description_by_phone
 from app.services.onfon_service import normalize_phone_number
-
+from app.services.onfon_service import queue_sms
 
 def get_user_by_phone(phone_number: str):
     return User.query.filter_by(phone_number=normalize_phone_number(phone_number)).first()
@@ -344,6 +344,16 @@ def handle_phone_interest_command(user_id: int, message: str):
 
     db.session.add(interest_request)
     db.session.commit()
+
+    queue_sms(
+        recipient=target.phone_number,
+        message=(
+            f"Hi {target.name},\n"
+            f"{requester.name} is interested in you.\n"
+            f"Reply YES to receive their details."
+        ),
+        sender_id="22141",
+    )
 
     return {
         "message": (

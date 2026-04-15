@@ -83,3 +83,26 @@ CREATE TABLE consent_responses (
     FOREIGN KEY (interest_request_id) REFERENCES interest_requests(id) ON DELETE CASCADE,
     FOREIGN KEY (responder_user_id) REFERENCES users(id) ON DELETE CASCADE
 );
+
+CREATE TABLE sms_logs (
+    id INT NOT NULL AUTO_INCREMENT,
+    direction VARCHAR(10) NOT NULL,
+    sender VARCHAR(20) NOT NULL,
+    recipient VARCHAR(20) NOT NULL,
+    message TEXT NOT NULL,
+    shortcode VARCHAR(20),
+    status VARCHAR(20) DEFAULT 'received',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (id)
+);
+
+CREATE TABLE sms_outbox (
+    id INT NOT NULL AUTO_INCREMENT,
+    recipient VARCHAR(20) NOT NULL,
+    message TEXT NOT NULL,
+    sender_id VARCHAR(20) DEFAULT '22141',
+    status VARCHAR(20) DEFAULT 'pending',
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    sent_at TIMESTAMP NULL DEFAULT NULL,
+    PRIMARY KEY (id)
+);

@@ -1,9 +1,61 @@
 import re
 from typing import Any
+from app import db
+from app.models import SmsLog, SmsOutbox
+from datetime import datetime
 
 import requests
 from flask import current_app
 
+def log_incoming_sms(sender: str, shortcode: str | None, message: str):
+    log = SmsLog(
+        direction="inbound",
+        sender=sender,
+        recipient=shortcode or "22141",
+        message=message,
+        shortcode=shortcode or "22141",
+        status="received",
+    )
+    db.session.add(log)
+    db.session.commit()
+    return log
+
+
+def log_outgoing_sms(recipient: str, message: str, sender_id: str = "22141", status: str = "pending"):
+    log = SmsLog(
+        direction="outbound",
+        sender=sender_id,
+        recipient=recipient,
+        message=message,
+        shortcode=sender_id,
+        status=status,
+    )
+    db.session.add(log)
+    db.session.commit()
+    return log
+
+
+def queue_sms(recipient: str, message: str, sender_id: str = "22141"):
+    outbox = SmsOutbox(
+        recipient=recipient,
+        message=message,
+        sender_id=sender_id,
+        status="pending",
+    )
+    db.session.add(outbox)
+    db.session.commit()
+    return outbox
+
+
+def mark_outbox_sent(outbox_id: int):
+    outbox = db.session.get(SmsOutbox, outbox_id)
+    if not outbox:
+        return None
+
+    outbox.status = "sent"
+    outbox.sent_at = datetime.utcnow()
+    db.session.commit()
+    return outbox
 
 def normalize_phone_number(phone: str | None) -> str | None:
     """
