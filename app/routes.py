@@ -19,11 +19,6 @@ from app.services.match_service import (
     get_next_matches,
     get_user_description_by_phone,
 )
-from app.services.onfon_service import (
-    extract_onfon_payload,
-    normalize_phone_number,
-    send_onfon_sms,
-)
 from app.services.user_service import (
     create_user,
     add_user_details,
@@ -165,6 +160,7 @@ def onfon_webhook():
         return "sender and message are required", 400, {
             "Content-Type": "text/plain; charset=utf-8"
         }
+
     log_incoming_sms(sender, shortcode, message)
 
     result, status_code = process_sms(sender, message)
@@ -183,7 +179,7 @@ def onfon_webhook():
         log_outgoing_sms(
             sender,
             sms_text,
-            sender_id=current_app.config.get("ONFON_SENDER-ID", "22141"),
+            sender_id=current_app.config.get("ONFON_SENDER_ID", "22141"),
             status="sent",
         )
         return sms_text, status_code, {"Content-Type": "text/plain; charset=utf-8"}
@@ -198,10 +194,10 @@ def onfon_webhook():
                 "Content-Type": "text/plain; charset=utf-8"
             }
 
-        # If provider only needs an ACK on webhook receipt
         return "OK", 200, {"Content-Type": "text/plain; charset=utf-8"}
 
     return "Invalid ONFON_REPLY_MODE", 500, {"Content-Type": "text/plain; charset=utf-8"}
+
 
 @bp.route("/sms/logs", methods=["GET"])
 def get_sms_logs():
