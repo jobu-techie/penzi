@@ -3,9 +3,15 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+REQUIRED_ENV_VARS = ["DB_USER", "DB_PASSWORD", "DB_HOST", "DB_NAME", "ONFON_API_KEY", "ONFON_WEBHOOK_TOKEN"]
+
+for var in REQUIRED_ENV_VARS:
+    if not os.getenv(var):
+        raise ValueError(f"Missing required environment variable: {var}")
+
 
 class Config:
-    SECRET_KEY = os.getenv("SECRET_KEY", "penzi-secret-key")
+    SECRET_KEY = os.getenv("SECRET_KEY") or os.urandom(24)
     SQLALCHEMY_DATABASE_URI = (
         f"mysql+pymysql://{os.getenv('DB_USER')}:{os.getenv('DB_PASSWORD')}"
         f"@{os.getenv('DB_HOST')}/{os.getenv('DB_NAME')}"
