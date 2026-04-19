@@ -1,3 +1,5 @@
+import re
+
 from app import db
 from app.models import (
     User,
@@ -10,8 +12,8 @@ from app.models import (
 )
 from app.services.user_service import validate_gender
 from app.services.match_service import get_user_description_by_phone
-from app.services.onfon_service import normalize_phone_number
-from app.services.onfon_service import queue_sms
+from app.services.onfon_service import normalize_phone_number, queue_sms
+
 
 def get_user_by_phone(phone_number: str):
     return User.query.filter_by(phone_number=normalize_phone_number(phone_number)).first()
@@ -42,16 +44,25 @@ def serialize_match_user(matched_user):
     }
 
 
-def build_match_list(user, age_range_min: int, age_range_max: int, county: str):
+def is_phone_number(message: str) -> bool:
+    return bool(re.match(r'^(07|01|254)\d{8,9}$', message.strip()))
+
+
+def build_match_list(user, age_range_min: int, age_range_max: int, county: str, exclude_ids=None):
     opposite_gender = "Female" if user.gender == "Male" else "Male"
 
-    return User.query.filter(
+    query = User.query.filter(
         User.id != user.id,
         User.age >= age_range_min,
         User.age <= age_range_max,
         User.county == county,
         User.gender == opposite_gender,
-    ).all()
+    )
+
+    if exclude_ids:
+        query = query.filter(User.id.notin_(exclude_ids))
+
+    return query.all()
 
 
 def handle_start_command(sender: str, message: str):
@@ -161,6 +172,13 @@ def handle_myself_command(user_id: int, message: str):
     if not user:
         return {"message": "User not found"}, 404
 
+    # Check details step is complete
+    existing_details = UserDetails.query.filter_by(user_id=user_id).first()
+    if not existing_details:
+        return {
+            "message": "Please complete your details first by sending details#education#profession#maritalStatus#religion#ethnicity"
+        }, 400
+
     if not message.upper().startswith("MYSELF"):
         return {"message": "Invalid MYSELF format"}, 400
 
@@ -194,6 +212,14 @@ def handle_match_command(user_id: int, message: str):
     if not user:
         return {"message": "User not found"}, 404
 
+    # Check registration is complete
+    existing_details = UserDetails.query.filter_by(user_id=user_id).first()
+    existing_description = UserDescription.query.filter_by(user_id=user_id).first()
+    if not existing_details or not existing_description:
+        return {
+            "message": "Please complete your registration first."
+        }, 400
+
     parts = message.split("#")
 
     if len(parts) != 3:
@@ -208,6 +234,13 @@ def handle_match_command(user_id: int, message: str):
     age_range_min, age_range_max, error = parse_age_range(age_range_text.strip())
     if error:
         return {"message": error}, 400
+
+    # Check for duplicate match request
+    existing_request = MatchRequest.query.filter_by(user_id=user_id, town=county).first()
+    if existing_request:
+        return {
+            "message": f"You already have a match request for {county}."
+        }, 409
 
     match_request = MatchRequest(
         user_id=user_id,
@@ -262,19 +295,19 @@ def handle_next_command(user_id: int):
     if not match_request:
         return {"message": "No previous match request found"}, 404
 
-    all_matches = build_match_list(
+    existing_results = MatchResult.query.filter_by(match_request_id=match_request.id).all()
+    already_sent_ids = [result.matched_user_id for result in existing_results]
+
+    # Query only unsent matches directly from DB
+    remaining_matches = build_match_list(
         user,
         match_request.age_range_min,
         match_request.age_range_max,
         match_request.town,
+        exclude_ids=already_sent_ids,
     )
 
-    existing_results = MatchResult.query.filter_by(match_request_id=match_request.id).all()
-    already_sent_ids = [result.matched_user_id for result in existing_results]
-
-    remaining_matches = [matched_user for matched_user in all_matches if matched_user.id not in already_sent_ids]
     next_batch = remaining_matches[:3]
-
     current_count = len(already_sent_ids)
     response_matches = []
 
@@ -406,6 +439,18 @@ def handle_yes_command(user_id: int):
 
     requester = db.session.get(User, interest_request.requester_user_id)
 
+    # Notify requester that their interest was accepted
+    queue_sms(
+        recipient=requester.phone_number,
+        message=(
+            f"Hi {requester.name},\n"
+            f"{responder.name} accepted your interest!\n"
+            f"Their number is {responder.phone_number}.\n"
+            "Feel free to connect!"
+        ),
+        sender_id="22141",
+    )
+
     return {
         "message": (
             "Congratulations!\n"
@@ -465,12 +510,7 @@ def process_sms_command(sender: str | None, message: str):
     if message.upper() == "YES":
         return handle_yes_command(user_id)
 
-    if (
-        message.strip().isdigit()
-        or message.strip().startswith("07")
-        or message.strip().startswith("01")
-        or message.strip().startswith("254")
-    ):
+    if is_phone_number(message):
         return handle_phone_interest_command(user_id, message)
 
     return {"message": "Unknown SMS command"}, 400
