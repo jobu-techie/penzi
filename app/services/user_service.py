@@ -36,7 +36,7 @@ def create_user(data: dict):
     user = User(
         name=str(data["name"]).strip(),
         age=age,
-        gender=gender.value,
+        gender=gender,
         county=str(data["county"]).strip(),
         town=str(data["town"]).strip(),
         phone_number=phone_number,
@@ -96,6 +96,13 @@ def add_user_description(user_id: int, data: dict):
     if not user:
         return {"error": "User not found"}, 404
 
+    # Check details step is complete first
+    existing_details = UserDetails.query.filter_by(user_id=user_id).first()
+    if not existing_details:
+        return {
+            "error": "Please complete user details first before adding a description."
+        }, 400
+
     if "description" not in data or str(data["description"]).strip() == "":
         return {"error": "description is required"}, 400
 
@@ -118,9 +125,15 @@ def add_user_description(user_id: int, data: dict):
     }, 201
 
 
-def get_all_users():
-    users = User.query.all()
-    return [user.to_dict() for user in users], 200
+def get_all_users(page: int = 1, per_page: int = 20):
+    pagination = User.query.paginate(page=page, per_page=per_page, error_out=False)
+    return {
+        "users": [user.to_dict() for user in pagination.items],
+        "total": pagination.total,
+        "page": pagination.page,
+        "pages": pagination.pages,
+        "per_page": pagination.per_page,
+    }, 200
 
 
 def get_user_profile(user_id: int):
