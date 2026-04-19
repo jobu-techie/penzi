@@ -7,3 +7,6 @@ __pycache__/
 *.backup
 *.save
 instance/
+*.backup
+*.save.backup
+nohup.out
