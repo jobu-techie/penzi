@@ -1,11 +1,13 @@
 import re
 from typing import Any
-from app import db
-from app.models import SmsLog, SmsOutbox
-from datetime import datetime
+from datetime import datetime, timezone
 
 import requests
 from flask import current_app
+
+from app import db
+from app.models import SmsLog, SmsOutbox
+
 
 def log_incoming_sms(sender: str, shortcode: str | None, message: str):
     log = SmsLog(
@@ -43,6 +45,17 @@ def queue_sms(recipient: str, message: str, sender_id: str = "22141"):
         status="pending",
     )
     db.session.add(outbox)
+
+    # Also log to SmsLog so queued messages are visible in logs
+    log = SmsLog(
+        direction="outbound",
+        sender=sender_id,
+        recipient=recipient,
+        message=message,
+        shortcode=sender_id,
+        status="queued",
+    )
+    db.session.add(log)
     db.session.commit()
     return outbox
 
@@ -53,15 +66,17 @@ def mark_outbox_sent(outbox_id: int):
         return None
 
     outbox.status = "sent"
-    outbox.sent_at = datetime.utcnow()
+    outbox.sent_at = datetime.now(timezone.utc)
     db.session.commit()
     return outbox
+
 
 def normalize_phone_number(phone: str | None) -> str | None:
     """
     Normalize Kenyan phone numbers to a consistent format.
     Examples:
-    - 0700000001 -> 254700000001
+    - 0700000001  -> 254700000001
+    - 700000001   -> 254700000001
     - 254700000001 -> 254700000001
     - +254700000001 -> 254700000001
     """
@@ -76,6 +91,10 @@ def normalize_phone_number(phone: str | None) -> str | None:
 
     if cleaned.startswith("0") and len(cleaned) == 10:
         return f"254{cleaned[1:]}"
+
+    # Handle numbers starting with 7 or 1 (9 digits, missing leading 0)
+    if (cleaned.startswith("7") or cleaned.startswith("1")) and len(cleaned) == 9:
+        return f"254{cleaned}"
 
     return cleaned
 
@@ -108,7 +127,11 @@ def extract_onfon_payload(data: dict[str, Any]) -> tuple[str | None, str | None,
         or data.get("destination")
     )
 
-    return normalize_phone_number(sender), str(message).strip() if message is not None else None, shortcode
+    return (
+        normalize_phone_number(sender),
+        str(message).strip() if message is not None else None,
+        shortcode,
+    )
 
 
 def send_onfon_sms(msisdn: str, text: str) -> dict[str, Any]:
@@ -132,6 +155,14 @@ def send_onfon_sms(msisdn: str, text: str) -> dict[str, Any]:
 
     response = requests.post(sms_url, json=payload, timeout=20)
     response.raise_for_status()
+
+    # Log outgoing SMS after successful send
+    log_outgoing_sms(
+        recipient=msisdn,
+        message=text,
+        sender_id=sender_id or "22141",
+        status="sent",
+    )
 
     try:
         return response.json()

@@ -1,5 +1,6 @@
 from app import db
 from app.models import User, UserDetails, InterestRequest, ConsentResponse
+from app.services.onfon_service import queue_sms
 
 
 def create_interest_request(data: dict):
@@ -37,6 +38,17 @@ def create_interest_request(data: dict):
 
     db.session.add(interest_request)
     db.session.commit()
+
+    # Notify target via SMS
+    queue_sms(
+        recipient=target.phone_number,
+        message=(
+            f"Hi {target.name},\n"
+            f"{requester.name} is interested in you.\n"
+            f"Reply YES to receive their details."
+        ),
+        sender_id="22141",
+    )
 
     target_details = UserDetails.query.filter_by(user_id=target.id).first()
 
@@ -95,8 +107,25 @@ def record_consent_response(data: dict):
     db.session.add(consent_response)
     db.session.commit()
 
+    # Guard against deleted requester
     requester = db.session.get(User, interest_request.requester_user_id)
+    if not requester:
+        return {"error": "Requesting user no longer exists"}, 404
+
     requester_details = UserDetails.query.filter_by(user_id=requester.id).first()
+
+    # Notify requester via SMS if accepted
+    if response_value == "YES":
+        queue_sms(
+            recipient=requester.phone_number,
+            message=(
+                f"Hi {requester.name},\n"
+                f"{responder.name} accepted your interest!\n"
+                f"Their number is {responder.phone_number}.\n"
+                "Feel free to connect!"
+            ),
+            sender_id="22141",
+        )
 
     response_payload = {
         "message": "Consent response recorded successfully",

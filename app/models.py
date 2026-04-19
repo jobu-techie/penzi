@@ -1,4 +1,5 @@
 from enum import Enum
+from datetime import datetime, timezone
 
 from app import db
 
@@ -14,15 +15,16 @@ class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), nullable=False)
     age = db.Column(db.Integer, nullable=False)
-    gender = db.Column(db.String(20), nullable=False)
+    gender = db.Column(db.Enum(GenderEnum), nullable=False)
     county = db.Column(db.String(100), nullable=False)
     town = db.Column(db.String(100), nullable=False)
     phone_number = db.Column(db.String(20), unique=True, nullable=False)
-    created_at = db.Column(db.DateTime)
-    updated_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     details = db.relationship("UserDetails", backref="user", uselist=False, cascade="all, delete-orphan")
     description = db.relationship("UserDescription", backref="user", uselist=False, cascade="all, delete-orphan")
+    match_requests = db.relationship("MatchRequest", backref="user", cascade="all, delete-orphan")
 
     def to_dict(self):
         return {
@@ -33,6 +35,7 @@ class User(db.Model):
             "county": self.county,
             "town": self.town,
             "phone_number": self.phone_number,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
 
@@ -46,8 +49,8 @@ class UserDetails(db.Model):
     marital_status = db.Column(db.String(50))
     religion = db.Column(db.String(50))
     ethnicity = db.Column(db.String(50))
-    created_at = db.Column(db.DateTime)
-    updated_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     def to_dict(self):
         return {
@@ -56,6 +59,7 @@ class UserDetails(db.Model):
             "marital_status": self.marital_status,
             "religion": self.religion,
             "ethnicity": self.ethnicity,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
 
@@ -65,12 +69,13 @@ class UserDescription(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), unique=True, nullable=False)
     description = db.Column(db.Text, nullable=False)
-    created_at = db.Column(db.DateTime)
-    updated_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     def to_dict(self):
         return {
-            "description": self.description
+            "description": self.description,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
 
@@ -82,7 +87,19 @@ class MatchRequest(db.Model):
     age_range_min = db.Column(db.Integer, nullable=False)
     age_range_max = db.Column(db.Integer, nullable=False)
     town = db.Column(db.String(100), nullable=False)
-    created_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    results = db.relationship("MatchResult", backref="match_request", cascade="all, delete-orphan")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "user_id": self.user_id,
+            "age_range_min": self.age_range_min,
+            "age_range_max": self.age_range_max,
+            "town": self.town,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
 
 
 class MatchResult(db.Model):
@@ -92,7 +109,16 @@ class MatchResult(db.Model):
     match_request_id = db.Column(db.Integer, db.ForeignKey("match_requests.id"), nullable=False)
     matched_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     result_order = db.Column(db.Integer, nullable=False)
-    created_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "match_request_id": self.match_request_id,
+            "matched_user_id": self.matched_user_id,
+            "result_order": self.result_order,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
 
 
 class InterestRequest(db.Model):
@@ -101,9 +127,20 @@ class InterestRequest(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     requester_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     target_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
-    status = db.Column(db.String(20))
-    created_at = db.Column(db.DateTime)
-    updated_at = db.Column(db.DateTime)
+    status = db.Column(db.String(20), default="pending")
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    consent = db.relationship("ConsentResponse", backref="interest_request", uselist=False, cascade="all, delete-orphan")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "requester_user_id": self.requester_user_id,
+            "target_user_id": self.target_user_id,
+            "status": self.status,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
 
 
 class ConsentResponse(db.Model):
@@ -113,7 +150,18 @@ class ConsentResponse(db.Model):
     interest_request_id = db.Column(db.Integer, db.ForeignKey("interest_requests.id"), unique=True, nullable=False)
     responder_user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
     response = db.Column(db.String(10), nullable=False)
-    created_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "interest_request_id": self.interest_request_id,
+            "responder_user_id": self.responder_user_id,
+            "response": self.response,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
 class SmsLog(db.Model):
     __tablename__ = "sms_logs"
 
@@ -124,7 +172,7 @@ class SmsLog(db.Model):
     message = db.Column(db.Text, nullable=False)
     shortcode = db.Column(db.String(20))
     status = db.Column(db.String(20), default="received")
-    created_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
 
     def to_dict(self):
         return {
@@ -135,6 +183,7 @@ class SmsLog(db.Model):
             "message": self.message,
             "shortcode": self.shortcode,
             "status": self.status,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
 
@@ -146,7 +195,7 @@ class SmsOutbox(db.Model):
     message = db.Column(db.Text, nullable=False)
     sender_id = db.Column(db.String(20), default="22141")
     status = db.Column(db.String(20), default="pending")
-    created_at = db.Column(db.DateTime)
+    created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     sent_at = db.Column(db.DateTime)
 
     def to_dict(self):
@@ -156,4 +205,6 @@ class SmsOutbox(db.Model):
             "message": self.message,
             "sender_id": self.sender_id,
             "status": self.status,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "sent_at": self.sent_at.isoformat() if self.sent_at else None,
         }

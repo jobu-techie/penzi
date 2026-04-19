@@ -7,6 +7,12 @@ def create_match_request(user_id: int, data: dict):
     if not user:
         return {"error": "User not found"}, 404
 
+    # Check registration is complete
+    existing_details = UserDetails.query.filter_by(user_id=user_id).first()
+    existing_description = UserDescription.query.filter_by(user_id=user_id).first()
+    if not existing_details or not existing_description:
+        return {"error": "Please complete your registration first."}, 400
+
     required_fields = ["age_range_min", "age_range_max", "county"]
     for field in required_fields:
         if field not in data or str(data[field]).strip() == "":
@@ -22,6 +28,11 @@ def create_match_request(user_id: int, data: dict):
         return {"error": "age_range_min cannot be greater than age_range_max"}, 400
 
     county = str(data["county"]).strip()
+
+    # Check for duplicate match request
+    existing_request = MatchRequest.query.filter_by(user_id=user_id, town=county).first()
+    if existing_request:
+        return {"error": f"Match request already exists for {county}."}, 409
 
     match_request = MatchRequest(
         user_id=user_id,
@@ -85,21 +96,25 @@ def get_next_matches(match_request_id: int):
 
     opposite_gender = "Female" if requester.gender == "Male" else "Male"
 
-    all_matches = User.query.filter(
-        User.id != requester.id,
-        User.age >= match_request.age_range_min,
-        User.age <= match_request.age_range_max,
-        User.county == match_request.town,
-        User.gender == opposite_gender
-    ).all()
-
     already_sent_ids = [
         result.matched_user_id
         for result in MatchResult.query.filter_by(match_request_id=match_request_id).all()
     ]
 
-    remaining_matches = [user for user in all_matches if user.id not in already_sent_ids]
+    # Query only unsent matches directly from DB
+    remaining_matches = User.query.filter(
+        User.id != requester.id,
+        User.age >= match_request.age_range_min,
+        User.age <= match_request.age_range_max,
+        User.county == match_request.town,
+        User.gender == opposite_gender,
+        User.id.notin_(already_sent_ids),
+    ).all()
+
     next_batch = remaining_matches[:3]
+
+    if not next_batch:
+        return {"message": "No more matches available for now.", "matches": []}, 200
 
     current_count = len(already_sent_ids)
     returned_matches = []
