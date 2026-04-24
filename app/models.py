@@ -5,8 +5,8 @@ from app import db
 
 
 class GenderEnum(str, Enum):
-    MALE = "Male"
-    FEMALE = "Female"
+    MALE = "MALE"
+    FEMALE = "FEMALE"
 
 
 class User(db.Model):

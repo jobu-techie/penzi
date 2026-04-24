@@ -9,6 +9,7 @@ from app.models import (
     MatchResult,
     InterestRequest,
     ConsentResponse,
+    GenderEnum
 )
 from app.services.user_service import validate_gender
 from app.services.match_service import get_user_description_by_phone
@@ -49,7 +50,7 @@ def is_phone_number(message: str) -> bool:
 
 
 def build_match_list(user, age_range_min: int, age_range_max: int, county: str, exclude_ids=None):
-    opposite_gender = "Female" if user.gender == "Male" else "Male"
+    opposite_gender = GenderEnum.FEMALE if user.gender == GenderEnum.MALE else GenderEnum.MALE
 
     query = User.query.filter(
         User.id != user.id,

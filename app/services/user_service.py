@@ -3,7 +3,7 @@ from app.models import GenderEnum, User, UserDetails, UserDescription
 
 
 def validate_gender(gender_text: str):
-    gender_input = str(gender_text).strip().capitalize()
+    gender_input = str(gender_text).strip().upper()
     try:
         return GenderEnum(gender_input)
     except ValueError:
