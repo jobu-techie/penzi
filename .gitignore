@@ -10,3 +10,5 @@ instance/
 *.backup
 *.save.backup
 nohup.out
+.postman/
+postman/
