@@ -209,3 +209,17 @@ def get_sms_logs():
 def get_sms_outbox():
     items = SmsOutbox.query.order_by(SmsOutbox.id.desc()).all()
     return jsonify([item.to_dict() for item in items]), 200
+
+@bp.route("/match/reset/<int:user_id>", methods=["DELETE"])
+def delete_user_match_requests(user_id):
+    from app import db
+    from app.models import MatchRequest, MatchResult
+
+    match_requests = MatchRequest.query.filter_by(user_id=user_id).all()
+
+    for match_request in match_requests:
+        MatchResult.query.filter_by(match_request_id=match_request.id).delete()
+        db.session.delete(match_request)
+
+    db.session.commit()
+    return jsonify({"message": "Match requests deleted successfully"}), 200
