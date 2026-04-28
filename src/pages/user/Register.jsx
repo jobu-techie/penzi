@@ -88,7 +88,7 @@ function Register() {
 
         {/* Header */}
         <div className="text-center mb-6">
-          <h1 className="text-3xl font-bold text-pink-600">💕 PENZI</h1>
+          <h1 className="text-3xl font-bold text-pink-600"> PENZI</h1>
           <p className="text-gray-500 mt-1">Create your profile</p>
         </div>
 

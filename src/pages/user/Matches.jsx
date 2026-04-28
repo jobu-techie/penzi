@@ -53,7 +53,7 @@ function Matches() {
     <div className="min-h-screen bg-gray-100">
       {/* Header */}
       <div className="bg-pink-600 text-white p-6 flex justify-between items-center">
-        <h1 className="text-2xl font-bold">💕 PENZI</h1>
+        <h1 className="text-2xl font-bold"> PENZI</h1>
         <button
           onClick={() => navigate("/")}
           className="bg-white text-pink-600 px-4 py-2 rounded-full font-semibold hover:bg-pink-50"

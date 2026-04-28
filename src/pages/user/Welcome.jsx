@@ -20,10 +20,16 @@ function Welcome() {
             Get Started
           </button>
           <button
-            onClick={() => navigate('/admin')}
+            onClick={() => navigate('/login')}
             className="border-2 border-white text-white font-bold py-3 px-8 rounded-full text-lg hover:bg-white hover:text-pink-600 transition"
           >
-            Admin Dashboard
+            Login
+          </button>
+          <button
+            onClick={() => navigate('/admin')}
+            className="text-white text-sm opacity-75 hover:opacity-100 transition"
+          >
+            Admin Dashboard →
           </button>
         </div>
       </div>
