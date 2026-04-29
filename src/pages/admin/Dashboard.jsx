@@ -45,17 +45,29 @@ function Dashboard() {
       <div className="p-8">
         <h2 className="text-xl font-bold text-gray-700 mb-6">Overview</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <div className="bg-white rounded-xl shadow p-6 border-l-4 border-pink-500">
+          <div
+            onClick={() => navigate("/admin/users")}
+            className="bg-white rounded-xl shadow p-6 border-l-4 border-pink-500 cursor-pointer hover:shadow-lg transition hover:border-pink-700"
+          >
             <p className="text-gray-500 text-sm">Total Users</p>
             <p className="text-4xl font-bold text-pink-600">{stats.users}</p>
+            <p className="text-pink-400 text-sm mt-2">Click to view users →</p>
           </div>
-          <div className="bg-white rounded-xl shadow p-6 border-l-4 border-blue-500">
+          <div
+            onClick={() => navigate("/admin/sms-logs")}
+            className="bg-white rounded-xl shadow p-6 border-l-4 border-blue-500 cursor-pointer hover:shadow-lg transition hover:border-blue-700"
+          >
             <p className="text-gray-500 text-sm">SMS Logs</p>
             <p className="text-4xl font-bold text-blue-600">{stats.smsLogs}</p>
+            <p className="text-blue-400 text-sm mt-2">Click to view logs →</p>
           </div>
-          <div className="bg-white rounded-xl shadow p-6 border-l-4 border-green-500">
+          <div
+            onClick={() => navigate("/admin/sms-outbox")}
+            className="bg-white rounded-xl shadow p-6 border-l-4 border-green-500 cursor-pointer hover:shadow-lg transition hover:border-green-700"
+          >
             <p className="text-gray-500 text-sm">SMS Outbox</p>
             <p className="text-4xl font-bold text-green-600">{stats.smsOutbox}</p>
+            <p className="text-green-400 text-sm mt-2">Click to view outbox →</p>
           </div>
         </div>
 

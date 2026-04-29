@@ -16,20 +16,16 @@ function Login() {
     setLoading(true);
     setError("");
     try {
-      const res = await api.get(`/users`);
-      const users = res.data.users || res.data;
-      const user = users.find(u => u.phone_number === phone);
-
-      if (!user) {
-        setError("Phone number not found. Please register first.");
-        return;
-      }
-
-      // Save user to localStorage
+      const res = await api.get(`/users/phone/${phone}`);
+      const user = res.data;
       localStorage.setItem("penzi_user", JSON.stringify(user));
       navigate("/matches");
     } catch (err) {
-      setError("Login failed. Please try again.");
+      if (err.response?.status === 404) {
+        setError("Phone number not found. Please register first.");
+      } else {
+        setError("Login failed. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
