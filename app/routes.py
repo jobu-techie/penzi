@@ -42,7 +42,9 @@ def health():
 
 @bp.route("/users", methods=["GET"])
 def get_users():
-    result, status_code = get_all_users()
+    page = request.args.get("page", 1, type=int)
+    per_page = request.args.get("per_page", 20, type=int)
+    result, status_code = get_all_users(page=page, per_page=per_page)
     return jsonify(result), status_code
 
 
@@ -75,6 +77,17 @@ def add_details(user_id):
 
     result, status_code = add_user_details(user_id, data)
     return jsonify(result), status_code
+
+
+@bp.route("/users/phone/<phone_number>", methods=["GET"])
+def get_user_by_phone(phone_number):
+    from app.services.onfon_service import normalize_phone_number
+    from app.models import User
+    normalized = normalize_phone_number(phone_number)
+    user = User.query.filter_by(phone_number=normalized).first()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    return jsonify(user.to_dict()), 200
 
 
 @bp.route("/myself/<int:user_id>", methods=["POST"])
@@ -223,3 +236,92 @@ def delete_user_match_requests(user_id):
 
     db.session.commit()
     return jsonify({"message": "Match requests deleted successfully"}), 200
+
+    #pending requests in users
+
+@bp.route("/interest/pending/<phone_number>", methods=["GET"])
+def get_pending_interests(phone_number):
+    from app.models import User, InterestRequest
+    from app.services.onfon_service import normalize_phone_number
+    
+    normalized = normalize_phone_number(phone_number)
+    user = User.query.filter_by(phone_number=normalized).first()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    pending = InterestRequest.query.filter_by(
+        target_user_id=user.id,
+        status="pending"
+    ).all()
+
+    result = []
+    for req in pending:
+        requester = User.query.get(req.requester_user_id)
+        if requester:
+            result.append({
+                "interest_request_id": req.id,
+                "requester_name": requester.name,
+                "requester_phone": requester.phone_number,
+                "requester_age": requester.age,
+                "requester_county": requester.county,
+                "requester_town": requester.town,
+            })
+
+    return jsonify(result), 200
+
+ #profile to get a phone number
+
+@bp.route("/users/profile/<phone_number>", methods=["GET"])
+def get_user_profile_by_phone(phone_number):
+    from app.models import User, UserDetails, UserDescription
+    from app.services.onfon_service import normalize_phone_number
+
+    normalized = normalize_phone_number(phone_number)
+    user = User.query.filter_by(phone_number=normalized).first()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    details = UserDetails.query.filter_by(user_id=user.id).first()
+    description = UserDescription.query.filter_by(user_id=user.id).first()
+
+    return jsonify({
+        "id": user.id,
+        "name": user.name,
+        "age": user.age,
+        "gender": user.gender,
+        "county": user.county,
+        "town": user.town,
+        "phone_number": user.phone_number,
+        "details": details.to_dict() if details else None,
+        "description": description.description if description else None,
+    }), 200  
+
+@bp.route("/interest/accepted-by-me/<phone_number>", methods=["GET"])
+def get_accepted_interests_for_requester(phone_number):
+    from app.models import User, InterestRequest
+    from app.services.onfon_service import normalize_phone_number
+
+    normalized = normalize_phone_number(phone_number)
+    user = User.query.filter_by(phone_number=normalized).first()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    accepted = InterestRequest.query.filter_by(
+        requester_user_id=user.id,
+        status="accepted"
+    ).all()
+
+    result = []
+    for req in accepted:
+        target = User.query.get(req.target_user_id)
+        if target:
+            result.append({
+                "interest_request_id": req.id,
+                "acceptor_name": target.name,
+                "acceptor_phone": target.phone_number,
+                "acceptor_age": target.age,
+                "acceptor_county": target.county,
+                "acceptor_town": target.town,
+            })
+
+    return jsonify(result), 200
