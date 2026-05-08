@@ -2,46 +2,28 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../../api/axios";
 
-function Login() {
+function AdminLogin() {
   const navigate = useNavigate();
-  const [phone, setPhone] = useState(() => {
-  const saved = sessionStorage.getItem("prefill_phone") || "";
-  sessionStorage.removeItem("prefill_phone");
-  return saved;
-});
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
   const handleLogin = async () => {
-    if (!phone || !password) {
-      setError("Please enter both phone number and password.");
-      return;
-    }
-    if (phone.length !== 10) {
-      setError("Phone number must be exactly 10 digits.");
+    if (!username || !password) {
+      setError("Please enter both username and password.");
       return;
     }
     setLoading(true);
     setError("");
     try {
-      const res = await api.post("/auth/login", {
-        phone_number: phone,
-        password: password,
-      });
-      const { token, user } = res.data;
-      localStorage.setItem("penzi_token", token);
-      localStorage.setItem("penzi_user", JSON.stringify(user));
-      navigate("/matches");
+      const res = await api.post("/auth/admin-login", { username, password });
+      localStorage.setItem("penzi_admin_token", res.data.token);
+      navigate("/admin");
     } catch (err) {
-      if (err.response?.status === 404) {
-        setError("Phone number not found. Please register first.");
-      } else if (err.response?.status === 401) {
-        setError("Incorrect password. Please try again.");
-      } else if (err.response?.status === 403) {
-        sessionStorage.setItem("prefill_phone", phone);
-        navigate("/set-password");
+      if (err.response?.status === 401) {
+        setError("Invalid admin credentials. Please try again.");
       } else {
         setError("Login failed. Please try again.");
       }
@@ -54,8 +36,8 @@ function Login() {
     <div className="min-h-screen bg-gradient-to-br from-pink-500 to-rose-600 flex items-center justify-center px-4">
       <div className="bg-white rounded-2xl shadow-xl p-8 w-full max-w-md">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-pink-600">Penzi</h1>
-          <p className="text-gray-500 mt-1">Welcome back!</p>
+          <h1 className="text-3xl font-bold text-pink-600">Penzi Admin</h1>
+          <p className="text-gray-500 mt-1">Admin access only</p>
         </div>
 
         {error && (
@@ -67,39 +49,25 @@ function Login() {
         <div className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Phone Number
+              Username
             </label>
             <input
-              type="tel"
-              inputMode="numeric"
-              placeholder="e.g. 0712345678"
-              maxLength={10}
-              value={phone}
-              onChange={(e) => {
-                const val = e.target.value.replace(/\D/g, "").slice(0, 10);
-                setPhone(val);
-              }}
+              type="text"
+              placeholder="Admin username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
               className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300"
             />
-            <p className="text-xs text-gray-400 mt-1">{phone.length}/10 digits</p>
           </div>
 
           <div>
-            <div className="flex justify-between items-center mb-1">
-              <label className="block text-sm font-medium text-gray-700">
-                Password
-              </label>
-              <button
-                onClick={() => navigate("/forgot-password")}
-                className="text-xs text-pink-600 hover:underline"
-              >
-                Forgot password?
-              </button>
-            </div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Password
+            </label>
             <div className="relative">
               <input
                 type={showPassword ? "text" : "password"}
-                placeholder="Enter your password"
+                placeholder="Admin password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleLogin()}
@@ -129,32 +97,11 @@ function Login() {
             disabled={loading}
             className="w-full bg-pink-600 text-white py-3 rounded-lg font-bold hover:bg-pink-700 transition disabled:opacity-60"
           >
-            {loading ? "Logging in..." : "Login"}
+            {loading ? "Logging in..." : "Login as Admin"}
           </button>
         </div>
 
-        <div className="mt-6 text-center space-y-2">
-          <p className="text-gray-500 text-sm">
-            Don't have an account?{" "}
-            <button
-              onClick={() => navigate("/register")}
-              className="text-pink-600 font-semibold hover:underline"
-            >
-              Register here
-            </button>
-          </p>
-          <p className="text-gray-500 text-sm">
-            Already registered but no password?{" "}
-            <button
-              onClick={() => {
-                sessionStorage.setItem("prefill_phone", phone);
-                navigate("/set-password");
-              }}
-              className="text-pink-600 font-semibold hover:underline"
-            >
-              Set password
-            </button>
-          </p>
+        <div className="mt-6 text-center">
           <button
             onClick={() => navigate("/")}
             className="text-gray-400 text-sm hover:text-pink-600 transition"
@@ -167,4 +114,4 @@ function Login() {
   );
 }
 
-export default Login;
+export default AdminLogin;

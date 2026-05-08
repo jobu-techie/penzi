@@ -1,17 +1,33 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../../api/axios";
 
+const KENYA_COUNTIES = [
+  "Baringo", "Bomet", "Bungoma", "Busia", "Elgeyo Marakwet",
+  "Embu", "Garissa", "Homa Bay", "Isiolo", "Kajiado",
+  "Kakamega", "Kericho", "Kiambu", "Kilifi", "Kirinyaga",
+  "Kisii", "Kisumu", "Kitui", "Kwale", "Laikipia",
+  "Lamu", "Machakos", "Makueni", "Mandera", "Marsabit",
+  "Meru", "Migori", "Mombasa", "Murang'a", "Nairobi",
+  "Nakuru", "Nandi", "Narok", "Nyamira", "Nyandarua",
+  "Nyeri", "Samburu", "Siaya", "Taita Taveta", "Tana River",
+  "Tharaka Nithi", "Trans Nzoia", "Turkana", "Uasin Gishu",
+  "Vihiga", "Wajir", "West Pokot"
+];
+
+const hashPhone = (phone) => {
+  if (!phone) return "";
+  const visible = phone.slice(-3);
+  return "*".repeat(phone.length - 3) + visible;
+};
+
 function Matches() {
   const navigate = useNavigate();
-  const [phone, setPhone] = useState(() => {
+  const [currentUser] = useState(() => {
     const user = localStorage.getItem("penzi_user");
-    return user ? JSON.parse(user).phone_number : "";
+    return user ? JSON.parse(user) : null;
   });
-  const [userName, setUserName] = useState(() => {
-    const user = localStorage.getItem("penzi_user");
-    return user ? JSON.parse(user).name : "";
-  });
+  const [phone] = useState(() => currentUser?.phone_number || "");
   const [ageMin, setAgeMin] = useState("");
   const [ageMax, setAgeMax] = useState("");
   const [county, setCounty] = useState("");
@@ -20,47 +36,59 @@ function Matches() {
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
   const [interestStatus, setInterestStatus] = useState({});
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [pendingInterests, setPendingInterests] = useState([]);
+  const [acceptedInterests, setAcceptedInterests] = useState([]);
+  const [responding, setResponding] = useState({});
+  const [activeTab, setActiveTab] = useState("search");
+  const [sentInterests, setSentInterests] = useState([]);
+  const [dashboardLoading, setDashboardLoading] = useState(false);
 
-  // If name is not in localStorage, fetch it from the API
-  useEffect(() => {
+  const fetchPendingInterests = useCallback(async () => {
     if (!phone) return;
-    if (userName) return;
-
-    const fetchUserName = async () => {
-      try {
-        const res = await api.get(`/users/phone/${phone}`);
-        setUserName(res.data.name || "");
-      } catch (err) {
-        console.error("Failed to fetch user name", err);
-      }
-    };
-
-    fetchUserName();
+    try {
+      const res = await api.get(`/interest/pending/${phone}`);
+      setPendingInterests(res.data);
+    } catch (err) {
+      console.error("Failed to fetch pending interests", err);
+    }
   }, [phone]);
 
-  // Fetch both pending requests AND accepted interests, combine for badge count
-  useEffect(() => {
+  const fetchAcceptedInterests = useCallback(async () => {
     if (!phone) return;
+    try {
+      const res = await api.get(`/interest/accepted/${phone}`);
+      setAcceptedInterests(res.data);
+    } catch (err) {
+      console.error("Failed to fetch accepted interests", err);
+    }
+  }, [phone]);
 
-    const fetchUnreadCount = async () => {
-      try {
-        const [pendingRes, acceptedRes] = await Promise.all([
-          api.get(`/interest/pending/${phone}`),
-          api.get(`/interest/accepted-by-me/${phone}`),
-        ]);
-        const pendingCount = Array.isArray(pendingRes.data) ? pendingRes.data.length : 0;
-        const acceptedCount = Array.isArray(acceptedRes.data) ? acceptedRes.data.length : 0;
-        setUnreadCount(pendingCount + acceptedCount);
-      } catch (err) {
-        console.error("Failed to fetch notification count", err);
-      }
-    };
+  const fetchSentInterests = useCallback(async () => {
+    if (!phone) return;
+    setDashboardLoading(true);
+    try {
+      const res = await api.get(`/interest/sent/${phone}`);
+      setSentInterests(res.data);
+    } catch (err) {
+      console.error("Failed to fetch sent interests", err);
+    } finally {
+      setDashboardLoading(false);
+    }
+  }, [phone]);
 
-    fetchUnreadCount();
-    const interval = setInterval(fetchUnreadCount, 30000);
+  useEffect(() => {
+    if (!currentUser) {
+      navigate("/login");
+      return;
+    }
+    fetchPendingInterests();
+    fetchAcceptedInterests();
+    const interval = setInterval(() => {
+      fetchPendingInterests();
+      fetchAcceptedInterests();
+    }, 10000);
     return () => clearInterval(interval);
-  }, [phone]);
+  }, [fetchPendingInterests, fetchAcceptedInterests, currentUser, navigate]);
 
   const sendSms = async (msg) => {
     return await api.post("/webhook/onfon", {
@@ -88,7 +116,7 @@ function Matches() {
   };
 
   const handleSearch = async () => {
-    if (!phone || !ageMin || !ageMax || !county) {
+    if (!ageMin || !ageMax || !county) {
       setMessage("Please fill in all fields.");
       return;
     }
@@ -131,8 +159,8 @@ function Matches() {
   const handleSearchAgain = async () => {
     setLoading(true);
     try {
-      const usersRes = await api.get(`/users/phone/${phone}`);
-      const user = usersRes.data;
+      const userRes = await api.get(`/users/phone/${phone}`);
+      const user = userRes.data;
       await api.delete(`/match/reset/${user.id}`);
       setMessage("");
       setSearched(false);
@@ -146,10 +174,6 @@ function Matches() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleDescribe = (matchPhone) => {
-    navigate(`/profile/${matchPhone}`);
   };
 
   const handleInterest = async (matchPhone) => {
@@ -168,180 +192,469 @@ function Matches() {
     }
   };
 
+  const handleRespond = async (interestRequestId, response) => {
+    setResponding(prev => ({ ...prev, [interestRequestId]: true }));
+    try {
+      await sendSms(response);
+      setPendingInterests(prev => prev.filter(i => i.interest_request_id !== interestRequestId));
+      fetchAcceptedInterests();
+    } catch (err) {
+      console.error("Failed to respond", err);
+    } finally {
+      setResponding(prev => ({ ...prev, [interestRequestId]: false }));
+    }
+  };
+
+  const totalSent = sentInterests.length;
+  const totalAccepted = sentInterests.filter(i => i.status === "accepted").length;
+  const totalDeclined = sentInterests.filter(i => i.status === "declined").length;
+  const totalPending = sentInterests.filter(i => i.status === "pending").length;
+
+  const statusStyle = (status) => {
+    switch (status) {
+      case "accepted": return "text-green-600 bg-green-50";
+      case "declined": return "text-red-500 bg-red-50";
+      default: return "text-yellow-600 bg-yellow-50";
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-100">
       <div className="bg-pink-600 text-white p-6 flex justify-between items-center">
-        <div>
-          <h1 className="text-2xl font-bold">Penzi</h1>
-          {userName && (
-            <p className="text-pink-200 text-sm mt-0.5">
-              Welcome back, <span className="text-white font-semibold">{userName}</span> 👋
-            </p>
-          )}
-        </div>
+        <h1 className="text-2xl font-bold">Penzi</h1>
         <div className="flex gap-2 items-center">
-
-          {/* Bell icon with combined unread count badge */}
-          <button
-            onClick={() => {
-              setUnreadCount(0);
-              navigate("/notifications");
-            }}
-            className="relative p-2 rounded-full hover:bg-pink-700 transition"
-            aria-label="Notifications"
-          >
-            <svg
-              xmlns="http://www.w3.org/2000/svg"
-              className="h-7 w-7 text-white"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
-              />
-            </svg>
-            {unreadCount > 0 && (
-              <span className="absolute top-1 right-1 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
-                {unreadCount > 99 ? "99+" : unreadCount}
-              </span>
-            )}
-          </button>
-
+          <span className="text-sm opacity-100">{currentUser?.name}</span>
           <button
             onClick={() => {
               localStorage.removeItem("penzi_user");
               navigate("/login");
             }}
-            className="bg-white text-pink-600 px-4 py-2 rounded-full font-semibold hover:bg-pink-50"
+            className="bg-white text-pink-600 px-4 py-2 rounded-full font-semibold hover:bg-pink-50 text-sm"
           >
             Logout
           </button>
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="bg-white shadow">
+        <div className="max-w-2xl mx-auto flex">
           <button
-            onClick={() => navigate("/")}
-            className="border border-white text-white px-4 py-2 rounded-full hover:bg-pink-700"
+            onClick={() => setActiveTab("search")}
+            className={`flex-1 py-3 font-semibold text-sm ${
+              activeTab === "search"
+                ? "border-b-2 border-pink-600 text-pink-600"
+                : "text-gray-500 hover:text-pink-600"
+            }`}
           >
-            Home
+            Find Matches
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab("interests");
+              fetchPendingInterests();
+            }}
+            className={`flex-1 py-3 font-semibold text-sm relative ${
+              activeTab === "interests"
+                ? "border-b-2 border-pink-600 text-pink-600"
+                : "text-gray-500 hover:text-pink-600"
+            }`}
+          >
+            Interests
+            {pendingInterests.length > 0 && (
+              <span className="absolute top-2 right-8 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
+                {pendingInterests.length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab("notifications");
+              fetchAcceptedInterests();
+            }}
+            className={`flex-1 py-3 font-semibold text-sm relative ${
+              activeTab === "notifications"
+                ? "border-b-2 border-pink-600 text-pink-600"
+                : "text-gray-500 hover:text-pink-600"
+            }`}
+          >
+            Matches
+            {acceptedInterests.length > 0 && (
+              <span className="absolute top-2 right-8 bg-green-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center">
+                {acceptedInterests.length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => {
+              setActiveTab("dashboard");
+              fetchSentInterests();
+            }}
+            className={`flex-1 py-3 font-semibold text-sm ${
+              activeTab === "dashboard"
+                ? "border-b-2 border-pink-600 text-pink-600"
+                : "text-gray-500 hover:text-pink-600"
+            }`}
+          >
+            Dashboard
           </button>
         </div>
       </div>
 
       <div className="p-8 max-w-2xl mx-auto">
-        <h2 className="text-xl font-bold text-gray-700 mb-6">Find Matches</h2>
 
-        <div className="bg-white rounded-xl shadow p-6 mb-6">
-          <div className="space-y-4">
-            <input
-              placeholder="Your Phone Number (e.g. 254712345678)"
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300"
-            />
-            <div className="flex gap-4">
-              <input
-                placeholder="Min Age"
-                type="number"
-                value={ageMin}
-                onChange={(e) => setAgeMin(e.target.value)}
-                className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300"
-              />
-              <input
-                placeholder="Max Age"
-                type="number"
-                value={ageMax}
-                onChange={(e) => setAgeMax(e.target.value)}
-                className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300"
-              />
-            </div>
-            <input
-              placeholder="County"
-              value={county}
-              onChange={(e) => setCounty(e.target.value)}
-              className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300"
-            />
-            <button
-              onClick={handleSearch}
-              disabled={loading}
-              className="w-full bg-pink-600 text-white py-3 rounded-lg font-bold hover:bg-pink-700 transition"
-            >
-              {loading ? "Searching..." : "Search Matches"}
-            </button>
-          </div>
-        </div>
-
-        {/* Summary message */}
-        {message && matches.length === 0 && (
-          <div className="bg-white rounded-xl shadow p-6 mb-4">
-            <pre className="text-gray-600 whitespace-pre-wrap font-sans">{message}</pre>
-          </div>
-        )}
-
-        {/* Match Cards */}
-        {matches.length > 0 && (
-          <div className="space-y-4 mb-6">
-            <p className="text-gray-600 font-semibold">
-              Found {matches.length} match(es):
-            </p>
-            {matches.map((match, index) => (
-              <div key={index} className="bg-white rounded-xl shadow p-6 border-l-4 border-pink-400">
-                <div className="flex justify-between items-start mb-3">
-                  <div>
-                    <h3 className="text-lg font-bold text-gray-800">{match.name}</h3>
-                    <p className="text-gray-500">Age: {match.age}</p>
-                    <p className="text-gray-500">Phone: {match.phone}</p>
-                  </div>
+        {/* Search Tab */}
+        {activeTab === "search" && (
+          <>
+            <div className="bg-white rounded-xl shadow p-6 mb-6">
+              <div className="space-y-4">
+                <div className="bg-pink-50 p-3 rounded-lg">
+                  <p className="text-sm text-gray-500">Searching as</p>
+                  <p className="font-semibold text-pink-600">{currentUser?.name}</p>
+                </div>
+                <div className="flex gap-4">
+                  <input
+                    placeholder="Min Age"
+                    type="number"
+                    inputMode="numeric"
+                    min="18"
+                    max="99"
+                    value={ageMin}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, "").slice(0, 2);
+                      setAgeMin(val);
+                    }}
+                    className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300"
+                  />
+                  <input
+                    placeholder="Max Age"
+                    type="number"
+                    inputMode="numeric"
+                    min="18"
+                    max="99"
+                    value={ageMax}
+                    onChange={(e) => {
+                      const val = e.target.value.replace(/\D/g, "").slice(0, 2);
+                      setAgeMax(val);
+                    }}
+                    className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300"
+                  />
                 </div>
 
-                {/* Interest status */}
-                {interestStatus[match.phone] && (
-                  <p className="text-green-600 text-sm mb-3 bg-green-50 p-2 rounded-lg">
-                    {interestStatus[match.phone]}
-                  </p>
-                )}
+                {/* County Dropdown */}
+                <select
+                  value={county}
+                  onChange={(e) => setCounty(e.target.value)}
+                  className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300 text-gray-700"
+                >
+                  <option value="">Select County</option>
+                  {KENYA_COUNTIES.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
 
-                {/* Action buttons */}
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleDescribe(match.phone)}
-                    disabled={loading}
-                    className="flex-1 border-2 border-pink-600 text-pink-600 py-2 rounded-lg font-semibold hover:bg-pink-50 transition text-sm"
-                  >
-                    View Description
-                  </button>
-                  <button
-                    onClick={() => handleInterest(match.phone)}
-                    disabled={loading || !!interestStatus[match.phone]}
-                    className="flex-1 bg-pink-600 text-white py-2 rounded-lg font-semibold hover:bg-pink-700 transition text-sm disabled:opacity-50"
-                  >
-                    {interestStatus[match.phone] ? "Interest Sent" : "Send Interest"}
-                  </button>
-                </div>
+                <button
+                  onClick={handleSearch}
+                  disabled={loading}
+                  className="w-full bg-pink-600 text-white py-3 rounded-lg font-bold hover:bg-pink-700 transition"
+                >
+                  {loading ? "Searching..." : "Search Matches"}
+                </button>
               </div>
-            ))}
-          </div>
+            </div>
+
+            {message && matches.length === 0 && (
+              <div className="bg-white rounded-xl shadow p-6 mb-4">
+                <pre className="text-gray-600 whitespace-pre-wrap font-sans">{message}</pre>
+              </div>
+            )}
+
+            {matches.length > 0 && (
+              <div className="space-y-4 mb-6">
+                <p className="text-gray-600 font-semibold">
+                  Found {matches.length} match(es):
+                </p>
+                {matches.map((match, index) => (
+                  <div key={index} className="bg-white rounded-xl shadow p-6 border-l-4 border-pink-400">
+                    <div className="mb-3">
+                      <h3 className="text-lg font-bold text-gray-800">{match.name}</h3>
+                      <p className="text-gray-500">Age: {match.age}</p>
+                      <p className="text-gray-400 text-sm">Phone: {hashPhone(match.phone)}</p>
+                    </div>
+                    {interestStatus[match.phone] && (
+                      <p className="text-green-600 text-sm mb-3 bg-green-50 p-2 rounded-lg">
+                        {interestStatus[match.phone]}
+                      </p>
+                    )}
+                    <button
+                      onClick={() => handleInterest(match.phone)}
+                      disabled={loading || !!interestStatus[match.phone]}
+                      className="w-full bg-pink-600 text-white py-2 rounded-lg font-semibold hover:bg-pink-700 transition text-sm disabled:opacity-50"
+                    >
+                      {interestStatus[match.phone] ? "Interest Sent" : "Send Interest"}
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {searched && (
+              <div className="flex gap-4">
+                <button
+                  onClick={handleNext}
+                  disabled={loading}
+                  className="flex-1 bg-white border-2 border-pink-600 text-pink-600 py-3 rounded-lg font-bold hover:bg-pink-50 transition"
+                >
+                  {loading ? "Loading..." : "Load More"}
+                </button>
+                <button
+                  onClick={handleSearchAgain}
+                  disabled={loading}
+                  className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg font-bold hover:bg-gray-300 transition"
+                >
+                  Search Again
+                </button>
+              </div>
+            )}
+          </>
         )}
 
-        {/* Action buttons */}
-        {searched && (
-          <div className="flex gap-4">
-            <button
-              onClick={handleNext}
-              disabled={loading}
-              className="flex-1 bg-white border-2 border-pink-600 text-pink-600 py-3 rounded-lg font-bold hover:bg-pink-50 transition"
-            >
-              {loading ? "Loading..." : "Load More"}
-            </button>
-            <button
-              onClick={handleSearchAgain}
-              disabled={loading}
-              className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-lg font-bold hover:bg-gray-300 transition"
-            >
-              Search Again
-            </button>
-          </div>
+        {/* Interests Tab */}
+        {activeTab === "interests" && (
+          <>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-bold text-gray-700">
+                People Interested in You ({pendingInterests.length})
+              </h2>
+              <button
+                onClick={fetchPendingInterests}
+                className="text-pink-600 text-sm font-semibold hover:underline"
+              >
+                Refresh
+              </button>
+            </div>
+
+            {pendingInterests.length === 0 ? (
+              <div className="bg-white rounded-xl shadow p-8 text-center">
+                <p className="text-gray-400 text-lg">No pending interest requests.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {pendingInterests.map((interest) => (
+                  <div key={interest.interest_request_id} className="bg-white rounded-xl shadow p-6 border-l-4 border-pink-400">
+                    <h3 className="text-lg font-bold text-gray-800 mb-1">
+                      {interest.requester_name}
+                    </h3>
+                    <p className="text-gray-500">Age: {interest.requester_age}</p>
+                    <p className="text-gray-500">County: {interest.requester_county}</p>
+                    <p className="text-gray-500">Town: {interest.requester_town}</p>
+                    <p className="text-gray-400 text-sm mb-3">
+                      Phone: {hashPhone(interest.requester_phone)}
+                    </p>
+                    <p className="text-pink-600 font-semibold mb-4">
+                      {interest.requester_name} is interested in you. Do you accept?
+                    </p>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => handleRespond(interest.interest_request_id, "YES")}
+                        disabled={responding[interest.interest_request_id]}
+                        className="flex-1 bg-pink-600 text-white py-2 rounded-lg font-bold hover:bg-pink-700 transition"
+                      >
+                        {responding[interest.interest_request_id] ? "Processing..." : "Accept"}
+                      </button>
+                      <button
+                        onClick={() => handleRespond(interest.interest_request_id, "NO")}
+                        disabled={responding[interest.interest_request_id]}
+                        className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg font-bold hover:bg-gray-300 transition"
+                      >
+                        {responding[interest.interest_request_id] ? "Processing..." : "Decline"}
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Notifications/Matches Tab */}
+        {activeTab === "notifications" && (
+          <>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-bold text-gray-700">
+                Your Matches ({acceptedInterests.length})
+              </h2>
+              <button
+                onClick={fetchAcceptedInterests}
+                className="text-pink-600 text-sm font-semibold hover:underline"
+              >
+                Refresh
+              </button>
+            </div>
+
+            {acceptedInterests.length === 0 ? (
+              <div className="bg-white rounded-xl shadow p-8 text-center">
+                <p className="text-gray-400 text-lg">No accepted matches yet.</p>
+                <p className="text-gray-400 text-sm mt-2">Send interests to potential matches to get started!</p>
+                <button
+                  onClick={() => setActiveTab("search")}
+                  className="mt-4 bg-pink-600 text-white px-6 py-2 rounded-full font-semibold hover:bg-pink-700 text-sm"
+                >
+                  Find Matches
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {acceptedInterests.map((match, index) => (
+                  <div key={index} className="bg-white rounded-xl shadow overflow-hidden">
+                    {/* Match header */}
+                    <div className="bg-pink-600 p-4">
+                      <div className="flex justify-between items-center">
+                        <div>
+                          <h3 className="text-xl font-bold text-white">{match.name}</h3>
+                          <p className="text-pink-200 text-sm">Accepted your interest</p>
+                        </div>
+                        <div className="w-12 h-12 bg-white rounded-full flex items-center justify-center">
+                          <span className="text-pink-600 text-xl font-bold">
+                            {match.name.charAt(0)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Match details */}
+                    <div className="p-6">
+                      <div className="grid grid-cols-2 gap-3 mb-4">
+                        <div className="bg-gray-50 rounded-lg p-3">
+                          <p className="text-xs text-gray-400">Age</p>
+                          <p className="font-semibold text-gray-700">{match.age} years</p>
+                        </div>
+                        <div className="bg-gray-50 rounded-lg p-3">
+                          <p className="text-xs text-gray-400">Gender</p>
+                          <p className="font-semibold text-gray-700">{match.gender}</p>
+                        </div>
+                        <div className="bg-gray-50 rounded-lg p-3">
+                          <p className="text-xs text-gray-400">County</p>
+                          <p className="font-semibold text-gray-700">{match.county}</p>
+                        </div>
+                        <div className="bg-gray-50 rounded-lg p-3">
+                          <p className="text-xs text-gray-400">Town</p>
+                          <p className="font-semibold text-gray-700">{match.town}</p>
+                        </div>
+                        {match.profession && (
+                          <div className="bg-gray-50 rounded-lg p-3">
+                            <p className="text-xs text-gray-400">Profession</p>
+                            <p className="font-semibold text-gray-700">{match.profession}</p>
+                          </div>
+                        )}
+                        {match.education && (
+                          <div className="bg-gray-50 rounded-lg p-3">
+                            <p className="text-xs text-gray-400">Education</p>
+                            <p className="font-semibold text-gray-700">{match.education}</p>
+                          </div>
+                        )}
+                        {match.religion && (
+                          <div className="bg-gray-50 rounded-lg p-3">
+                            <p className="text-xs text-gray-400">Religion</p>
+                            <p className="font-semibold text-gray-700">{match.religion}</p>
+                          </div>
+                        )}
+                        {match.ethnicity && (
+                          <div className="bg-gray-50 rounded-lg p-3">
+                            <p className="text-xs text-gray-400">Ethnicity</p>
+                            <p className="font-semibold text-gray-700">{match.ethnicity}</p>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Phone number - shown fully since they accepted */}
+                      <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+                        <p className="text-xs text-green-600 font-semibold mb-1">Phone Number</p>
+                        <p className="text-green-800 font-bold text-lg">{match.phone_number}</p>
+                        <p className="text-green-600 text-xs mt-1">
+                          This person accepted your interest. Feel free to connect!
+                        </p>
+                      </div>
+
+                      <button
+                        onClick={() => navigate(`/profile/${match.phone_number}`)}
+                        className="w-full border-2 border-pink-600 text-pink-600 py-2 rounded-lg font-semibold hover:bg-pink-50 transition text-sm"
+                      >
+                        View Full Profile
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
+
+        {/* Dashboard Tab */}
+        {activeTab === "dashboard" && (
+          <>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-bold text-gray-700">Your Activity</h2>
+              <button
+                onClick={fetchSentInterests}
+                className="text-pink-600 text-sm font-semibold hover:underline"
+              >
+                Refresh
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 mb-6">
+              <div className="bg-white rounded-xl shadow p-5 text-center">
+                <p className="text-3xl font-bold text-pink-600">{totalSent}</p>
+                <p className="text-gray-500 text-sm mt-1">Total Sent</p>
+              </div>
+              <div className="bg-white rounded-xl shadow p-5 text-center">
+                <p className="text-3xl font-bold text-green-500">{totalAccepted}</p>
+                <p className="text-gray-500 text-sm mt-1">Accepted</p>
+              </div>
+              <div className="bg-white rounded-xl shadow p-5 text-center">
+                <p className="text-3xl font-bold text-red-400">{totalDeclined}</p>
+                <p className="text-gray-500 text-sm mt-1">Declined</p>
+              </div>
+              <div className="bg-white rounded-xl shadow p-5 text-center">
+                <p className="text-3xl font-bold text-yellow-500">{totalPending}</p>
+                <p className="text-gray-500 text-sm mt-1">Awaiting Reply</p>
+              </div>
+            </div>
+
+            <h3 className="text-md font-bold text-gray-600 mb-3">Interest History</h3>
+            {dashboardLoading ? (
+              <div className="bg-white rounded-xl shadow p-8 text-center">
+                <p className="text-gray-400">Loading...</p>
+              </div>
+            ) : sentInterests.length === 0 ? (
+              <div className="bg-white rounded-xl shadow p-8 text-center">
+                <p className="text-gray-400 text-lg">You have not sent any interests yet.</p>
+                <button
+                  onClick={() => setActiveTab("search")}
+                  className="mt-4 bg-pink-600 text-white px-6 py-2 rounded-lg font-semibold hover:bg-pink-700 transition text-sm"
+                >
+                  Find Matches
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {sentInterests.map((interest, index) => (
+                  <div key={index} className="bg-white rounded-xl shadow p-5 flex justify-between items-center">
+                    <div>
+                      <h4 className="font-bold text-gray-800">{interest.receiver_name}</h4>
+                      <p className="text-gray-500 text-sm">Age: {interest.receiver_age}</p>
+                      <p className="text-gray-500 text-sm">County: {interest.receiver_county}</p>
+                      <p className="text-gray-400 text-xs">Phone: {hashPhone(interest.receiver_phone)}</p>
+                    </div>
+                    <span className={`text-xs font-bold px-3 py-1 rounded-full capitalize ${statusStyle(interest.status)}`}>
+                      {interest.status}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

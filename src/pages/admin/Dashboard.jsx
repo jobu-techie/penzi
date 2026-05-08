@@ -9,6 +9,12 @@ function Dashboard() {
     smsLogs: 0,
     smsOutbox: 0,
   });
+  
+  useEffect(() => {
+  if (!localStorage.getItem("penzi_admin_token")) {
+    navigate("/admin/login");
+  }
+}, []);
 
   useEffect(() => {
     const fetchStats = async () => {

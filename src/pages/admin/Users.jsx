@@ -7,6 +7,7 @@ function Users() {
   const [users, setUsers] = useState([]);
   const [filtered, setFiltered] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [searching, setSearching] = useState(false);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -29,24 +30,43 @@ function Users() {
     }
   };
 
+  const fetchAllUsers = async () => {
+    setSearching(true);
+    try {
+      const res = await api.get(`/users/all`);
+      return Array.isArray(res.data) ? res.data : (res.data.users || []);
+    } catch (err) {
+      console.error("Failed to fetch all users", err);
+      return [];
+    } finally {
+      setSearching(false);
+    }
+  };
+
   useEffect(() => {
     fetchUsers(page);
   }, [page]);
 
-  const handleSearch = (e) => {
-    const query = e.target.value.toLowerCase();
+  const handleSearch = async (e) => {
+    const query = e.target.value;
     setSearch(query);
-    if (query === "") {
-      setFiltered(users);
-    } else {
-      const results = users.filter(
-        (user) =>
-          user.name.toLowerCase().includes(query) ||
-          user.phone_number.includes(query)
-      );
-      setFiltered(results);
+
+    if (query.trim() === "") {
+      fetchUsers(page);
+      return;
     }
+
+    const allUsers = await fetchAllUsers();
+    const q = query.toLowerCase();
+    const results = allUsers.filter(
+      (user) =>
+        user.name?.toLowerCase().includes(q) ||
+        user.phone_number?.includes(q)
+    );
+    setFiltered(results);
   };
+
+  const isSearching = search.trim() !== "";
 
   return (
     <div className="min-h-screen bg-gray-100">
@@ -65,9 +85,11 @@ function Users() {
           <h2 className="text-xl font-bold text-gray-700">
             All Users ({total} total)
           </h2>
-          <p className="text-gray-500 text-sm">
-            Page {page} of {totalPages}
-          </p>
+          {!isSearching && (
+            <p className="text-gray-500 text-sm">
+              Page {page} of {totalPages}
+            </p>
+          )}
         </div>
 
         <div className="bg-white rounded-xl shadow p-4 mb-6">
@@ -78,6 +100,14 @@ function Users() {
             onChange={handleSearch}
             className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300 text-gray-700"
           />
+          {searching && (
+            <p className="text-pink-500 text-sm mt-2">Searching all users...</p>
+          )}
+          {isSearching && !searching && (
+            <p className="text-gray-500 text-sm mt-2">
+              Found <span className="font-semibold text-pink-600">{filtered.length}</span> result(s) for "<span className="font-semibold">{search}</span>"
+            </p>
+          )}
         </div>
 
         {loading ? (
@@ -132,27 +162,30 @@ function Users() {
               </table>
             </div>
 
-            <div className="flex justify-between items-center">
-              <button
-                onClick={() => setPage(p => Math.max(1, p - 1))}
-                disabled={page === 1}
-                className="px-6 py-2 rounded-lg bg-white shadow text-pink-600 font-semibold border border-pink-300 hover:bg-pink-50 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Previous
-              </button>
+            {/* Only show pagination when not searching */}
+            {!isSearching && (
+              <div className="flex justify-between items-center">
+                <button
+                  onClick={() => setPage(p => Math.max(1, p - 1))}
+                  disabled={page === 1}
+                  className="px-6 py-2 rounded-lg bg-white shadow text-pink-600 font-semibold border border-pink-300 hover:bg-pink-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Previous
+                </button>
 
-              <p className="text-gray-600 font-semibold">
-                Page {page} of {totalPages}
-              </p>
+                <p className="text-gray-600 font-semibold">
+                  Page {page} of {totalPages}
+                </p>
 
-              <button
-                onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-                disabled={page === totalPages}
-                className="px-6 py-2 rounded-lg bg-pink-600 shadow text-white font-semibold hover:bg-pink-700 disabled:opacity-40 disabled:cursor-not-allowed"
-              >
-                Next
-              </button>
-            </div>
+                <button
+                  onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                  disabled={page === totalPages}
+                  className="px-6 py-2 rounded-lg bg-pink-600 shadow text-white font-semibold hover:bg-pink-700 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  Next
+                </button>
+              </div>
+            )}
           </>
         )}
       </div>
