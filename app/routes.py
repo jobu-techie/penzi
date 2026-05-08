@@ -48,6 +48,13 @@ def get_users():
     return jsonify(result), status_code
 
 
+@bp.route("/users/all", methods=["GET"])
+def get_all_users_unpaginated():
+    from app.models import User
+    users = User.query.order_by(User.id.desc()).all()
+    return jsonify([u.to_dict() for u in users]), 200
+
+
 @bp.route("/users/<int:user_id>", methods=["GET"])
 def get_user(user_id):
     result, status_code = get_user_profile(user_id)
@@ -151,7 +158,6 @@ def respond_to_interest():
 
 @bp.route("/webhook/onfon", methods=["POST"])
 def onfon_webhook():
-    # Optional shared-secret protection
     expected_token = current_app.config.get("ONFON_WEBHOOK_TOKEN")
     incoming_token = (
         request.headers.get("X-Webhook-Token")
@@ -161,7 +167,6 @@ def onfon_webhook():
     if expected_token and incoming_token != expected_token:
         return "Unauthorized", 401, {"Content-Type": "text/plain; charset=utf-8"}
 
-    # Accept JSON or form-encoded payloads
     data = request.get_json(silent=True) or request.form.to_dict()
 
     if not data:
@@ -187,7 +192,6 @@ def onfon_webhook():
 
     reply_mode = current_app.config.get("ONFON_REPLY_MODE", "direct")
 
-    # Mode 1: return text directly for gateway relay
     if reply_mode == "direct":
         log_outgoing_sms(
             sender,
@@ -197,7 +201,6 @@ def onfon_webhook():
         )
         return sms_text, status_code, {"Content-Type": "text/plain; charset=utf-8"}
 
-    # Mode 2: actively send SMS through Onfon MT API
     if reply_mode == "send_api":
         try:
             send_onfon_sms(sender, sms_text)
@@ -223,6 +226,7 @@ def get_sms_outbox():
     items = SmsOutbox.query.order_by(SmsOutbox.id.desc()).all()
     return jsonify([item.to_dict() for item in items]), 200
 
+
 @bp.route("/match/reset/<int:user_id>", methods=["DELETE"])
 def delete_user_match_requests(user_id):
     from app import db
@@ -237,13 +241,12 @@ def delete_user_match_requests(user_id):
     db.session.commit()
     return jsonify({"message": "Match requests deleted successfully"}), 200
 
-    #pending requests in users
 
 @bp.route("/interest/pending/<phone_number>", methods=["GET"])
 def get_pending_interests(phone_number):
     from app.models import User, InterestRequest
     from app.services.onfon_service import normalize_phone_number
-    
+
     normalized = normalize_phone_number(phone_number)
     user = User.query.filter_by(phone_number=normalized).first()
     if not user:
@@ -269,7 +272,6 @@ def get_pending_interests(phone_number):
 
     return jsonify(result), 200
 
- #profile to get a phone number
 
 @bp.route("/users/profile/<phone_number>", methods=["GET"])
 def get_user_profile_by_phone(phone_number):
@@ -294,7 +296,8 @@ def get_user_profile_by_phone(phone_number):
         "phone_number": user.phone_number,
         "details": details.to_dict() if details else None,
         "description": description.description if description else None,
-    }), 200  
+    }), 200
+
 
 @bp.route("/interest/accepted-by-me/<phone_number>", methods=["GET"])
 def get_accepted_interests_for_requester(phone_number):
@@ -325,3 +328,179 @@ def get_accepted_interests_for_requester(phone_number):
             })
 
     return jsonify(result), 200
+
+
+@bp.route("/interest/sent/<phone_number>", methods=["GET"])
+def get_sent_interests(phone_number):
+    from app.models import User, InterestRequest
+    from app.services.onfon_service import normalize_phone_number
+
+    normalized = normalize_phone_number(phone_number)
+    user = User.query.filter_by(phone_number=normalized).first()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    sent = InterestRequest.query.filter_by(
+        requester_user_id=user.id
+    ).all()
+
+    result = []
+    for req in sent:
+        target = User.query.get(req.target_user_id)
+        if target:
+            result.append({
+                "interest_request_id": req.id,
+                "receiver_name": target.name,
+                "receiver_phone": target.phone_number,
+                "receiver_age": target.age,
+                "receiver_county": target.county,
+                "receiver_town": target.town,
+                "status": req.status,
+            })
+
+    return jsonify(result), 200
+    
+@bp.route("/auth/register", methods=["POST"])
+def auth_register():
+    from app.models import User
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Invalid request"}), 400
+
+    phone = normalize_phone_number(data.get("phone_number", ""))
+    password = data.get("password", "").strip()
+
+    if not phone or not password:
+        return jsonify({"error": "Phone number and password are required"}), 400
+
+    if len(password) < 6:
+        return jsonify({"error": "Password must be at least 6 characters"}), 400
+
+    user = User.query.filter_by(phone_number=phone).first()
+    if not user:
+        return jsonify({"error": "Phone number not found. Please register via SMS first."}), 404
+
+    if user.password_hash:
+        return jsonify({"error": "Password already set. Please login."}), 409
+
+    user.set_password(password)
+    from app import db
+    db.session.commit()
+
+    return jsonify({"message": "Password set successfully. You can now login."}), 200
+
+
+@bp.route("/auth/login", methods=["POST"])
+def auth_login():
+    from app.models import User
+    from flask_jwt_extended import create_access_token
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Invalid request"}), 400
+
+    phone = normalize_phone_number(data.get("phone_number", ""))
+    password = data.get("password", "").strip()
+
+    if not phone or not password:
+        return jsonify({"error": "Phone number and password are required"}), 400
+
+    user = User.query.filter_by(phone_number=phone).first()
+    if not user:
+        return jsonify({"error": "Phone number not found. Please register first."}), 404
+
+    if not user.password_hash:
+        return jsonify({"error": "No password set. Please set a password first."}), 403
+
+    if not user.check_password(password):
+        return jsonify({"error": "Incorrect password. Please try again."}), 401
+
+    token = create_access_token(identity=str(user.id))
+
+    return jsonify({
+        "token": token,
+        "user": user.to_dict()
+    }), 200
+
+@bp.route("/auth/admin-login", methods=["POST"])
+def admin_login():
+    from flask_jwt_extended import create_access_token
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Invalid request"}), 400
+
+    username = data.get("username", "").strip()
+    password = data.get("password", "").strip()
+
+    # Hardcoded admin credentials — change these in production
+    ADMIN_USERNAME = "admin"
+    ADMIN_PASSWORD = "penzi@admin2024"
+
+    if username != ADMIN_USERNAME or password != ADMIN_PASSWORD:
+        return jsonify({"error": "Invalid admin credentials."}), 401
+
+    token = create_access_token(identity="admin")
+    return jsonify({"token": token}), 200
+
+@bp.route("/auth/reset-password", methods=["POST"])
+def reset_password():
+    from app.models import User
+    from app import db
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Invalid request"}), 400
+
+    phone = normalize_phone_number(data.get("phone_number", ""))
+    new_password = data.get("new_password", "").strip()
+
+    if not phone or not new_password:
+        return jsonify({"error": "Phone number and new password are required"}), 400
+
+    if len(new_password) < 6:
+        return jsonify({"error": "Password must be at least 6 characters"}), 400
+
+    user = User.query.filter_by(phone_number=phone).first()
+    if not user:
+        return jsonify({"error": "Phone number not found."}), 404
+
+    user.set_password(new_password)
+    db.session.commit()
+
+    return jsonify({"message": "Password reset successfully."}), 200
+
+@bp.route("/interest/accepted/<phone_number>", methods=["GET"])
+def get_accepted_interests(phone_number):
+    from app.models import User, InterestRequest, ConsentResponse, UserDetails
+    from app.services.onfon_service import normalize_phone_number
+
+    normalized = normalize_phone_number(phone_number)
+    user = User.query.filter_by(phone_number=normalized).first()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    accepted = InterestRequest.query.filter_by(
+        requester_user_id=user.id,
+        status="accepted"
+    ).all()
+
+    result = []
+    for req in accepted:
+        target = User.query.get(req.target_user_id)
+        details = UserDetails.query.filter_by(user_id=target.id).first() if target else None
+        if target:
+            result.append({
+                "interest_request_id": req.id,
+                "name": target.name,
+                "phone_number": target.phone_number,
+                "age": target.age,
+                "gender": target.gender,
+                "county": target.county,
+                "town": target.town,
+                "education": details.education_level if details else None,
+                "profession": details.profession if details else None,
+                "marital_status": details.marital_status if details else None,
+                "religion": details.religion if details else None,
+                "ethnicity": details.ethnicity if details else None,
+            })
+
+    return jsonify(result), 200
+

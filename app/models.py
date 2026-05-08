@@ -19,12 +19,24 @@ class User(db.Model):
     county = db.Column(db.String(100), nullable=False)
     town = db.Column(db.String(100), nullable=False)
     phone_number = db.Column(db.String(20), unique=True, nullable=False)
+    password_hash = db.Column(db.String(255), nullable=True)
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     details = db.relationship("UserDetails", backref="user", uselist=False, cascade="all, delete-orphan")
     description = db.relationship("UserDescription", backref="user", uselist=False, cascade="all, delete-orphan")
     match_requests = db.relationship("MatchRequest", backref="user", cascade="all, delete-orphan")
+
+    def set_password(self, password):
+        from werkzeug.security import generate_password_hash
+        self.password_hash = generate_password_hash(password)
+        password_hash = db.Column(db.String(255), nullable=True)
+
+    def check_password(self, password):
+        from werkzeug.security import check_password_hash
+        if not self.password_hash:
+            return False
+        return check_password_hash(self.password_hash, password)
 
     def to_dict(self):
         return {

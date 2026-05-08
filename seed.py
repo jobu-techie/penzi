@@ -78,7 +78,7 @@ def generate_phone():
     suffix = str(random.randint(100000, 999999))
     raw = f"{prefix}{suffix}"
     # Normalize to 254 format
-    return f"254{raw[1:]}"
+    return f"{prefix}{suffix}"
 
 def seed_users(count=10000):
     with app.app_context():

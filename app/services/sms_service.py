@@ -173,7 +173,6 @@ def handle_myself_command(user_id: int, message: str):
     if not user:
         return {"message": "User not found"}, 404
 
-    # Check details step is complete
     existing_details = UserDetails.query.filter_by(user_id=user_id).first()
     if not existing_details:
         return {
@@ -213,7 +212,6 @@ def handle_match_command(user_id: int, message: str):
     if not user:
         return {"message": "User not found"}, 404
 
-    # Check registration is complete
     existing_details = UserDetails.query.filter_by(user_id=user_id).first()
     existing_description = UserDescription.query.filter_by(user_id=user_id).first()
     if not existing_details or not existing_description:
@@ -236,7 +234,6 @@ def handle_match_command(user_id: int, message: str):
     if error:
         return {"message": error}, 400
 
-    # Check for duplicate match request
     existing_request = MatchRequest.query.filter_by(user_id=user_id, town=county).first()
     if existing_request:
         return {
@@ -299,7 +296,6 @@ def handle_next_command(user_id: int):
     existing_results = MatchResult.query.filter_by(match_request_id=match_request.id).all()
     already_sent_ids = [result.matched_user_id for result in existing_results]
 
-    # Query only unsent matches directly from DB
     remaining_matches = build_match_list(
         user,
         match_request.age_range_min,
@@ -440,7 +436,6 @@ def handle_yes_command(user_id: int):
 
     requester = db.session.get(User, interest_request.requester_user_id)
 
-    # Notify requester that their interest was accepted
     queue_sms(
         recipient=requester.phone_number,
         message=(
@@ -459,6 +454,55 @@ def handle_yes_command(user_id: int):
             f"{requester.name}, {requester.phone_number}\n"
             "Feel free to connect!"
         )
+    }, 200
+
+
+def handle_no_command(user_id: int):
+    responder = db.session.get(User, user_id)
+    if not responder:
+        return {"message": "User not found"}, 404
+
+    interest_request = InterestRequest.query.filter_by(
+        target_user_id=user_id,
+        status="pending"
+    ).order_by(InterestRequest.id.desc()).first()
+
+    if not interest_request:
+        return {"message": "No pending interest request found"}, 404
+
+    existing_response = ConsentResponse.query.filter_by(
+        interest_request_id=interest_request.id
+    ).first()
+
+    if existing_response:
+        return {"message": "Consent response already exists"}, 409
+
+    consent_response = ConsentResponse(
+        interest_request_id=interest_request.id,
+        responder_user_id=user_id,
+        response="NO",
+    )
+
+    interest_request.status = "declined"
+
+    db.session.add(consent_response)
+    db.session.commit()
+
+    requester = db.session.get(User, interest_request.requester_user_id)
+
+    if requester:
+        queue_sms(
+            recipient=requester.phone_number,
+            message=(
+                f"Hi {requester.name},\n"
+                f"{responder.name} has declined your interest.\n"
+                "Keep searching for your match!"
+            ),
+            sender_id="22141",
+        )
+
+    return {
+        "message": "You have declined the interest request."
     }, 200
 
 
@@ -510,6 +554,9 @@ def process_sms_command(sender: str | None, message: str):
 
     if message.upper() == "YES":
         return handle_yes_command(user_id)
+
+    if message.upper() == "NO":
+        return handle_no_command(user_id)
 
     if is_phone_number(message):
         return handle_phone_interest_command(user_id, message)

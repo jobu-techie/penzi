@@ -73,12 +73,12 @@ def mark_outbox_sent(outbox_id: int):
 
 def normalize_phone_number(phone: str | None) -> str | None:
     """
-    Normalize Kenyan phone numbers to a consistent format.
+    Normalize Kenyan phone numbers to 07XXXXXXXX format (10 digits).
     Examples:
-    - 0700000001  -> 254700000001
-    - 700000001   -> 254700000001
-    - 254700000001 -> 254700000001
-    - +254700000001 -> 254700000001
+    - 254700000001  -> 0700000001
+    - +254700000001 -> 0700000001
+    - 700000001     -> 0700000001
+    - 0700000001    -> 0700000001
     """
     if not phone:
         return None
@@ -86,15 +86,17 @@ def normalize_phone_number(phone: str | None) -> str | None:
     cleaned = re.sub(r"\s+", "", str(phone).strip())
     cleaned = cleaned.replace("+", "")
 
-    if cleaned.startswith("254") and len(cleaned) == 12:
+    # Already in 0700000001 format
+    if cleaned.startswith("0") and len(cleaned) == 10:
         return cleaned
 
-    if cleaned.startswith("0") and len(cleaned) == 10:
-        return f"254{cleaned[1:]}"
+    # 254700000001 -> 0700000001
+    if cleaned.startswith("254") and len(cleaned) == 12:
+        return f"0{cleaned[3:]}"
 
-    # Handle numbers starting with 7 or 1 (9 digits, missing leading 0)
+    # 700000001 (9 digits, missing leading 0)
     if (cleaned.startswith("7") or cleaned.startswith("1")) and len(cleaned) == 9:
-        return f"254{cleaned}"
+        return f"0{cleaned}"
 
     return cleaned
 
