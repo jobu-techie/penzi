@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -15,14 +15,22 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../api/axios';
 import { COLORS, SHADOWS } from '../theme';
 
-export default function LoginScreen({ navigation }) {
+export default function LoginScreen({ navigation, route }) {
   const [phone, setPhone] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  // Mirror web: prefill phone if passed from Register screen
+  useEffect(() => {
+    if (route?.params?.phone) {
+      setPhone(route.params.phone);
+    }
+  }, [route?.params?.phone]);
+
   const handleLogin = async () => {
+    // Validation — mirrors web
     if (!phone || !password) {
       setError('Please enter both phone number and password.');
       return;
@@ -31,20 +39,26 @@ export default function LoginScreen({ navigation }) {
       setError('Phone number must be exactly 10 digits.');
       return;
     }
+
     setLoading(true);
     setError('');
+
     try {
       const res = await api.post('/auth/login', {
         phone_number: phone,
         password,
       });
+
       const { token, user } = res.data;
       await AsyncStorage.setItem('penzi_token', token);
       await AsyncStorage.setItem('penzi_user', JSON.stringify(user));
+
+      // Replace so user can't go back to Login
       navigation.replace('Matches');
+
     } catch (err) {
       if (err.response?.status === 404) {
-        // User does not exist — go to Register with phone prefilled
+        // Mirror web: redirect to Register with phone prefilled
         setError('Phone number not found. Redirecting to register...');
         setTimeout(() => {
           navigation.navigate('Register', { phone });
@@ -52,7 +66,7 @@ export default function LoginScreen({ navigation }) {
       } else if (err.response?.status === 401) {
         setError('Incorrect password. Please try again.');
       } else if (err.response?.status === 403) {
-        // User exists but no password — go to SetPassword with phone prefilled
+        // Mirror web: user exists but no password — go to SetPassword
         navigation.navigate('SetPassword', { phone });
       } else {
         setError('Login failed. Please try again.');
@@ -68,28 +82,32 @@ export default function LoginScreen({ navigation }) {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <StatusBar barStyle="light-content" backgroundColor={COLORS.primary} />
+
       <ScrollView
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled"
       >
-        {/* Gradient Header */}
+        {/* ── Header (mirrors the pink gradient top of web) ── */}
         <View style={styles.headerBg}>
           <View style={styles.headerContent}>
             <Text style={styles.logo}>Penzi</Text>
-            <Text style={styles.tagline}>Welcome back 💕</Text>
+            <Text style={styles.tagline}>Welcome back 👋</Text>
           </View>
+          {/* Curve at bottom of header — same visual as web card */}
           <View style={styles.headerCurve} />
         </View>
 
-        {/* Card */}
+        {/* ── Card ── */}
         <View style={styles.card}>
+
+          {/* Error box — mirrors web red bg box */}
           {error ? (
             <View style={styles.errorBox}>
               <Text style={styles.errorText}>{error}</Text>
             </View>
           ) : null}
 
-          {/* Phone */}
+          {/* ── Phone Number ── */}
           <Text style={styles.label}>Phone Number</Text>
           <TextInput
             style={styles.input}
@@ -102,8 +120,16 @@ export default function LoginScreen({ navigation }) {
           />
           <Text style={styles.hint}>{phone.length}/10 digits</Text>
 
-          {/* Password */}
-          <Text style={styles.label}>Password</Text>
+          {/* ── Password ── */}
+          <View style={styles.labelRow}>
+            <Text style={styles.label}>Password</Text>
+            <TouchableOpacity
+              onPress={() => navigation.navigate('ForgotPassword')}
+            >
+              <Text style={styles.forgotText}>Forgot password?</Text>
+            </TouchableOpacity>
+          </View>
+
           <View style={styles.passwordRow}>
             <TextInput
               style={[styles.input, { flex: 1, marginBottom: 0 }]}
@@ -113,6 +139,7 @@ export default function LoginScreen({ navigation }) {
               value={password}
               onChangeText={setPassword}
               onSubmitEditing={handleLogin}
+              returnKeyType="done"
             />
             <TouchableOpacity
               style={styles.eyeBtn}
@@ -122,14 +149,7 @@ export default function LoginScreen({ navigation }) {
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity
-            style={styles.forgotBtn}
-            onPress={() => navigation.navigate('ForgotPassword')}
-          >
-            <Text style={styles.forgotText}>Forgot password?</Text>
-          </TouchableOpacity>
-
-          {/* Login Button */}
+          {/* ── Login Button ── */}
           <TouchableOpacity
             style={[styles.btn, loading && styles.btnDisabled]}
             onPress={handleLogin}
@@ -143,7 +163,7 @@ export default function LoginScreen({ navigation }) {
             )}
           </TouchableOpacity>
 
-          {/* Footer links */}
+          {/* ── Footer links — mirrors web ── */}
           <View style={styles.footer}>
             <Text style={styles.footerText}>Don't have an account? </Text>
             <TouchableOpacity onPress={() => navigation.navigate('Register')}>
@@ -161,11 +181,12 @@ export default function LoginScreen({ navigation }) {
           </View>
 
           <TouchableOpacity
-            style={{ alignItems: 'center', marginTop: 8 }}
+            style={styles.backBtn}
             onPress={() => navigation.navigate('Welcome')}
           >
-            <Text style={{ color: COLORS.gray400, fontSize: 13 }}>Back to Home</Text>
+            <Text style={styles.backText}>Back to Home</Text>
           </TouchableOpacity>
+
         </View>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -177,6 +198,8 @@ const styles = StyleSheet.create({
     flexGrow: 1,
     backgroundColor: COLORS.gray100,
   },
+
+  // ── Header ──────────────────────────────────────────
   headerBg: {
     backgroundColor: COLORS.primary,
     paddingTop: 60,
@@ -204,28 +227,42 @@ const styles = StyleSheet.create({
     letterSpacing: -1,
   },
   tagline: {
-    color: COLORS.primaryMid,
+    color: 'rgba(255,255,255,0.75)',
     fontSize: 16,
     marginTop: 4,
   },
+
+  // ── Card ────────────────────────────────────────────
   card: {
     backgroundColor: COLORS.white,
     marginHorizontal: 20,
     marginTop: 10,
+    marginBottom: 32,
     borderRadius: 24,
     padding: 24,
     ...SHADOWS.card,
   },
+
+  // ── Error ───────────────────────────────────────────
   errorBox: {
-    backgroundColor: COLORS.red50,
+    backgroundColor: '#FEF2F2',
     borderRadius: 10,
     padding: 12,
     marginBottom: 16,
   },
   errorText: {
-    color: COLORS.red500,
+    color: '#EF4444',
     fontSize: 13,
     textAlign: 'center',
+  },
+
+  // ── Form ────────────────────────────────────────────
+  labelRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 12,
+    marginBottom: 6,
   },
   label: {
     fontSize: 13,
@@ -253,7 +290,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    marginBottom: 4,
+    marginBottom: 20,
   },
   eyeBtn: {
     padding: 10,
@@ -261,16 +298,13 @@ const styles = StyleSheet.create({
   eyeIcon: {
     fontSize: 18,
   },
-  forgotBtn: {
-    alignSelf: 'flex-end',
-    marginBottom: 20,
-    marginTop: 6,
-  },
   forgotText: {
     color: COLORS.primary,
     fontSize: 13,
     fontWeight: '600',
   },
+
+  // ── Button ──────────────────────────────────────────
   btn: {
     backgroundColor: COLORS.primary,
     borderRadius: 14,
@@ -288,6 +322,8 @@ const styles = StyleSheet.create({
     fontSize: 16,
     letterSpacing: 0.5,
   },
+
+  // ── Footer ──────────────────────────────────────────
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',
@@ -301,6 +337,14 @@ const styles = StyleSheet.create({
   linkText: {
     color: COLORS.primary,
     fontWeight: '700',
+    fontSize: 13,
+  },
+  backBtn: {
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  backText: {
+    color: COLORS.gray400,
     fontSize: 13,
   },
 });
