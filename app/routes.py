@@ -1,4 +1,6 @@
 from flask import Blueprint, current_app, jsonify, request
+from werkzeug.utils import secure_filename
+import os
 
 from app.sms_handler import process_sms
 from app.services.interest_service import (
@@ -26,6 +28,7 @@ from app.services.user_service import (
     get_all_users,
     get_user_profile,
 )
+from app.services.subscription_service import check_search_limit, increment_search_count
 
 bp = Blueprint("routes", __name__)
 
@@ -89,12 +92,22 @@ def add_details(user_id):
 @bp.route("/users/phone/<phone_number>", methods=["GET"])
 def get_user_by_phone(phone_number):
     from app.services.onfon_service import normalize_phone_number
-    from app.models import User
-    normalized = normalize_phone_number(phone_number)
+    from app.models import User, UserDetails
+    normalized = normalize_phone_number(phone=phone_number)
     user = User.query.filter_by(phone_number=normalized).first()
     if not user:
         return jsonify({"error": "User not found"}), 404
-    return jsonify(user.to_dict()), 200
+
+    details = UserDetails.query.filter_by(user_id=user.id).first()
+
+    data = user.to_dict()
+    data["education"] = details.education_level if details else None
+    data["profession"] = details.profession if details else None
+    data["marital_status"] = details.marital_status if details else None
+    data["religion"] = details.religion if details else None
+    data["ethnicity"] = details.ethnicity if details else None
+
+    return jsonify(data), 200
 
 
 @bp.route("/myself/<int:user_id>", methods=["POST"])
@@ -110,12 +123,21 @@ def add_self_description(user_id):
 
 @bp.route("/match/<int:user_id>", methods=["POST"])
 def find_matches(user_id):
-    data = request.get_json(silent=True)
+    # Check daily search limit (free tier = 10/day, premium = unlimited)
+    allowed, reason = check_search_limit(user_id)
+    if not allowed:
+        return jsonify({"error": reason, "upgrade_required": True}), 429
 
+    data = request.get_json(silent=True)
     if not data:
         return jsonify({"error": "Request body must be valid JSON"}), 400
 
     result, status_code = create_match_request(user_id, data)
+
+    # Only count successful searches
+    if status_code == 200:
+        increment_search_count(user_id)
+
     return jsonify(result), status_code
 
 
@@ -359,7 +381,8 @@ def get_sent_interests(phone_number):
             })
 
     return jsonify(result), 200
-    
+
+
 @bp.route("/auth/register", methods=["POST"])
 def auth_register():
     from app.models import User
@@ -421,6 +444,7 @@ def auth_login():
         "user": user.to_dict()
     }), 200
 
+
 @bp.route("/auth/admin-login", methods=["POST"])
 def admin_login():
     from flask_jwt_extended import create_access_token
@@ -431,15 +455,15 @@ def admin_login():
     username = data.get("username", "").strip()
     password = data.get("password", "").strip()
 
-    # Hardcoded admin credentials — change these in production
-    ADMIN_USERNAME = "admin"
-    ADMIN_PASSWORD = "penzi@admin2024"
+    ADMIN_USERNAME = "job"
+    ADMIN_PASSWORD = "Jobdiaz@18"
 
     if username != ADMIN_USERNAME or password != ADMIN_PASSWORD:
         return jsonify({"error": "Invalid admin credentials."}), 401
 
     token = create_access_token(identity="admin")
     return jsonify({"token": token}), 200
+
 
 @bp.route("/auth/reset-password", methods=["POST"])
 def reset_password():
@@ -466,6 +490,7 @@ def reset_password():
     db.session.commit()
 
     return jsonify({"message": "Password reset successfully."}), 200
+
 
 @bp.route("/interest/accepted/<phone_number>", methods=["GET"])
 def get_accepted_interests(phone_number):
@@ -504,3 +529,117 @@ def get_accepted_interests(phone_number):
 
     return jsonify(result), 200
 
+
+@bp.route("/users/change-password", methods=["POST"])
+def change_password():
+    from app.models import User
+    from app import db
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Invalid request"}), 400
+
+    phone = normalize_phone_number(data.get("phone", ""))
+    current_pw = data.get("current_password", "").strip()
+    new_pw = data.get("new_password", "").strip()
+
+    if not phone or not current_pw or not new_pw:
+        return jsonify({"error": "phone, current_password and new_password are required"}), 400
+
+    if len(new_pw) < 6:
+        return jsonify({"error": "New password must be at least 6 characters"}), 400
+
+    user = User.query.filter_by(phone_number=phone).first()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    if not user.check_password(current_pw):
+        return jsonify({"message": "Current password is incorrect"}), 401
+
+    user.set_password(new_pw)
+    db.session.commit()
+
+    return jsonify({"message": "Password changed successfully"}), 200
+
+
+@bp.route("/users/profile-picture", methods=["POST"])
+def upload_profile_picture():
+    from app.models import User
+    from app import db
+
+    phone = normalize_phone_number(request.form.get("phone", ""))
+    if not phone:
+        return jsonify({"error": "phone is required"}), 400
+
+    if "profile_picture" not in request.files:
+        return jsonify({"error": "No file uploaded"}), 400
+
+    file = request.files["profile_picture"]
+    if file.filename == "":
+        return jsonify({"error": "Empty filename"}), 400
+
+    ALLOWED = {"png", "jpg", "jpeg", "gif", "webp"}
+    ext = file.filename.rsplit(".", 1)[-1].lower()
+    if ext not in ALLOWED:
+        return jsonify({"error": "File type not allowed"}), 400
+
+    user = User.query.filter_by(phone_number=phone).first()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    upload_folder = os.path.join(current_app.root_path, "static", "profile_pics")
+    os.makedirs(upload_folder, exist_ok=True)
+
+    filename = secure_filename(f"{user.id}_profile.{ext}")
+    filepath = os.path.join(upload_folder, filename)
+    file.save(filepath)
+
+    user.profile_picture = f"/static/profile_pics/{filename}"
+    db.session.commit()
+
+    return jsonify({
+        "message": "Profile picture updated successfully",
+        "profile_picture": user.profile_picture,
+    }), 200
+
+
+@bp.route("/users/update-profile", methods=["POST"])
+def update_profile():
+    from app.models import User, UserDetails
+    from app import db
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Invalid request"}), 400
+
+    phone = normalize_phone_number(data.get("phone", ""))
+    user = User.query.filter_by(phone_number=phone).first()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    if "name" in data:
+        user.name = data["name"].strip()
+    if "town" in data:
+        user.town = data["town"].strip()
+    if "county" in data:
+        user.county = data["county"].strip()
+
+    details = UserDetails.query.filter_by(user_id=user.id).first()
+    if not details:
+        details = UserDetails(user_id=user.id)
+        db.session.add(details)
+
+    if "education" in data:
+        details.education_level = data["education"].strip()
+    if "profession" in data:
+        details.profession = data["profession"].strip()
+    if "marital_status" in data:
+        details.marital_status = data["marital_status"].strip()
+    if "religion" in data:
+        details.religion = data["religion"].strip()
+    if "ethnicity" in data:
+        details.ethnicity = data["ethnicity"].strip()
+
+    db.session.commit()
+
+    return jsonify({"message": "Profile updated successfully"}), 200

@@ -9,6 +9,7 @@ class GenderEnum(str, Enum):
     FEMALE = "FEMALE"
 
 
+
 class User(db.Model):
     __tablename__ = "users"
 
@@ -20,6 +21,7 @@ class User(db.Model):
     town = db.Column(db.String(100), nullable=False)
     phone_number = db.Column(db.String(20), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=True)
+    profile_picture = db.Column(db.String(255), nullable=True)  # ← NEW
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
@@ -30,7 +32,7 @@ class User(db.Model):
     def set_password(self, password):
         from werkzeug.security import generate_password_hash
         self.password_hash = generate_password_hash(password)
-        password_hash = db.Column(db.String(255), nullable=True)
+        # ← REMOVED the stray `password_hash = db.Column(...)` that was here
 
     def check_password(self, password):
         from werkzeug.security import check_password_hash
@@ -47,6 +49,7 @@ class User(db.Model):
             "county": self.county,
             "town": self.town,
             "phone_number": self.phone_number,
+            "profile_picture": self.profile_picture,  # ← NEW
             "created_at": self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -220,3 +223,13 @@ class SmsOutbox(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "sent_at": self.sent_at.isoformat() if self.sent_at else None,
         }
+# Import new subscription models so SQLAlchemy picks them up
+from app.models_subscription import (
+    SubscriptionPlan,
+    UserSubscription,
+    CoinWallet,
+    CoinTransaction,
+    Payment,
+    DailySearchCount,
+)
+
