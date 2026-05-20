@@ -15,8 +15,8 @@ depends_on = None
 
 
 def upgrade():
-    op.add_column('users', sa.Column('profile_picture', sa.String(length=255), nullable=True))
+    pass
 
 
 def downgrade():
-    op.drop_column('users', 'profile_picture')
+    pass

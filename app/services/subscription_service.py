@@ -94,43 +94,45 @@ def increment_search_count(user_id: int):
 # ── Plans ─────────────────────────────────────────────────────────────────────
 
 def seed_plans():
-    """Insert default plans if they don't exist. Call once at startup."""
-    defaults = [
-        {
-            "name": "free",
-            "price_kes": 0,
-            "duration_days": 36500,
-            "daily_search_limit": 10,
-            "can_see_who_liked": False,
-            "can_boost_profile": False,
-            "can_super_like": False,
-            "description": "10 searches per day. Basic matching.",
-        },
-        {
-            "name": "premium_monthly",
-            "price_kes": 299,
-            "duration_days": 30,
-            "daily_search_limit": -1,
-            "can_see_who_liked": True,
-            "can_boost_profile": True,
-            "can_super_like": True,
-            "description": "Unlimited searches, see who liked you, profile boosts.",
-        },
-        {
-            "name": "premium_quarterly",
-            "price_kes": 749,
-            "duration_days": 90,
-            "daily_search_limit": -1,
-            "can_see_who_liked": True,
-            "can_boost_profile": True,
-            "can_super_like": True,
-            "description": "3 months premium at a discounted rate.",
-        },
-    ]
-    for d in defaults:
-        if not SubscriptionPlan.query.filter_by(name=d["name"]).first():
-            db.session.add(SubscriptionPlan(**d))
-    db.session.commit()
+    try:
+        defaults = [
+            {
+                "name": "free",
+                "price_kes": 0,
+                "duration_days": 36500,
+                "daily_search_limit": 10,
+                "can_see_who_liked": False,
+                "can_boost_profile": False,
+                "can_super_like": False,
+                "description": "10 searches per day. Basic matching.",
+            },
+            {
+                "name": "premium_monthly",
+                "price_kes": 299,
+                "duration_days": 30,
+                "daily_search_limit": -1,
+                "can_see_who_liked": True,
+                "can_boost_profile": True,
+                "can_super_like": True,
+                "description": "Unlimited searches, see who liked you, profile boosts.",
+            },
+            {
+                "name": "premium_quarterly",
+                "price_kes": 749,
+                "duration_days": 90,
+                "daily_search_limit": -1,
+                "can_see_who_liked": True,
+                "can_boost_profile": True,
+                "can_super_like": True,
+                "description": "3 months premium at a discounted rate.",
+            },
+        ]
+        for d in defaults:
+            if not SubscriptionPlan.query.filter_by(name=d["name"]).first():
+                db.session.add(SubscriptionPlan(**d))
+        db.session.commit()
+    except Exception as e:
+        print(f"Skipping seed_plans (tables may not exist yet): {e}")
 
 
 def get_all_plans():

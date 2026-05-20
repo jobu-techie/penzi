@@ -211,11 +211,11 @@ def downgrade():
                existing_server_default=sa.text('CURRENT_TIMESTAMP'))
 
     with op.batch_alter_table('interest_requests', schema=None) as batch_op:
-        batch_op.drop_constraint(None, type_='foreignkey')
-        batch_op.drop_constraint(None, type_='foreignkey')
-        batch_op.create_foreign_key(batch_op.f('interest_requests_ibfk_2'), 'users', ['target_user_id'], ['id'], ondelete='CASCADE')
-        batch_op.create_foreign_key(batch_op.f('interest_requests_ibfk_1'), 'users', ['requester_user_id'], ['id'], ondelete='CASCADE')
-        batch_op.create_index(batch_op.f('requester_user_id'), ['requester_user_id', 'target_user_id'], unique=True)
+        batch_op.drop_constraint('interest_requests_ibfk_1', type_='foreignkey')
+        batch_op.drop_constraint('interest_requests_ibfk_2', type_='foreignkey')
+        batch_op.drop_index('requester_user_id')  # now safe to drop
+        batch_op.create_foreign_key(None, 'users', ['requester_user_id'], ['id'])
+        batch_op.create_foreign_key(None, 'users', ['target_user_id'], ['id'])
 
     with op.batch_alter_table('chat_messages', schema=None) as batch_op:
         batch_op.drop_index(batch_op.f('ix_chat_messages_interest_request_id'))

@@ -20,6 +20,7 @@ def create_app():
         from app import models          # your main models (User, InterestRequest, etc.)
         from app import models_chat     # ChatMessage
         from app import models_subscription 
+        from app.models_otp import OTP
 
     from app.routes import bp
     app.register_blueprint(bp)
@@ -29,6 +30,9 @@ def create_app():
 
     from app.routes_subscription import sub_bp
     app.register_blueprint(sub_bp)
+    
+    from app.routes_otp import otp_bp
+    app.register_blueprint(otp_bp)
 
     with app.app_context():
         from app.services.subscription_service import seed_plans
