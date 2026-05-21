@@ -1,10 +1,3 @@
-"""Add subscription, wallet, payment tables
-
-Revision ID: f4db63817538
-Revises: 2eea7d36c67d
-Create Date: 2026-05-11 16:49:29.130698
-
-"""
 from alembic import op
 import sqlalchemy as sa
 from sqlalchemy.dialects import mysql
@@ -94,14 +87,14 @@ def upgrade():
     )
     with op.batch_alter_table('interest_requests', schema=None) as batch_op:
         pass
-       
+
     with op.batch_alter_table('match_requests', schema=None) as batch_op:
         batch_op.alter_column('created_at',
                existing_type=mysql.TIMESTAMP(),
                type_=sa.DateTime(),
                existing_nullable=True,
                existing_server_default=sa.text('CURRENT_TIMESTAMP'))
-        batch_op.drop_constraint(batch_op.f('match_requests_ibfk_1'), type_='foreignkey')
+        batch_op.drop_constraint('match_requests_ibfk_1', type_='foreignkey')
         batch_op.create_foreign_key(None, 'users', ['user_id'], ['id'])
 
     with op.batch_alter_table('match_results', schema=None) as batch_op:
@@ -110,8 +103,8 @@ def upgrade():
                type_=sa.DateTime(),
                existing_nullable=True,
                existing_server_default=sa.text('CURRENT_TIMESTAMP'))
-        batch_op.drop_constraint(batch_op.f('match_results_ibfk_2'), type_='foreignkey')
-        batch_op.drop_constraint(batch_op.f('match_results_ibfk_1'), type_='foreignkey')
+        batch_op.drop_constraint('match_results_ibfk_2', type_='foreignkey')
+        batch_op.drop_constraint('match_results_ibfk_1', type_='foreignkey')
         batch_op.create_foreign_key(None, 'users', ['matched_user_id'], ['id'])
         batch_op.create_foreign_key(None, 'match_requests', ['match_request_id'], ['id'])
 
@@ -144,7 +137,7 @@ def upgrade():
                type_=sa.DateTime(),
                existing_nullable=True,
                existing_server_default=sa.text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'))
-        batch_op.drop_constraint(batch_op.f('user_descriptions_ibfk_1'), type_='foreignkey')
+        batch_op.drop_constraint('user_descriptions_ibfk_1', type_='foreignkey')
         batch_op.create_foreign_key(None, 'users', ['user_id'], ['id'])
 
     with op.batch_alter_table('user_details', schema=None) as batch_op:
@@ -158,7 +151,7 @@ def upgrade():
                type_=sa.DateTime(),
                existing_nullable=True,
                existing_server_default=sa.text('CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP'))
-        batch_op.drop_constraint(batch_op.f('user_details_ibfk_1'), type_='foreignkey')
+        batch_op.drop_constraint('user_details_ibfk_1', type_='foreignkey')
         batch_op.create_foreign_key(None, 'users', ['user_id'], ['id'])
 
     with op.batch_alter_table('users', schema=None) as batch_op:
@@ -200,7 +193,7 @@ def downgrade():
 
     with op.batch_alter_table('user_details', schema=None) as batch_op:
         batch_op.drop_constraint(None, type_='foreignkey')
-        batch_op.create_foreign_key(batch_op.f('user_details_ibfk_1'), 'users', ['user_id'], ['id'], ondelete='CASCADE')
+        batch_op.create_foreign_key('user_details_ibfk_1', 'users', ['user_id'], ['id'], ondelete='CASCADE')
         batch_op.alter_column('updated_at',
                existing_type=sa.DateTime(),
                type_=mysql.TIMESTAMP(),
@@ -214,7 +207,7 @@ def downgrade():
 
     with op.batch_alter_table('user_descriptions', schema=None) as batch_op:
         batch_op.drop_constraint(None, type_='foreignkey')
-        batch_op.create_foreign_key(batch_op.f('user_descriptions_ibfk_1'), 'users', ['user_id'], ['id'], ondelete='CASCADE')
+        batch_op.create_foreign_key('user_descriptions_ibfk_1', 'users', ['user_id'], ['id'], ondelete='CASCADE')
         batch_op.alter_column('updated_at',
                existing_type=sa.DateTime(),
                type_=mysql.TIMESTAMP(),
@@ -247,8 +240,8 @@ def downgrade():
     with op.batch_alter_table('match_results', schema=None) as batch_op:
         batch_op.drop_constraint(None, type_='foreignkey')
         batch_op.drop_constraint(None, type_='foreignkey')
-        batch_op.create_foreign_key(batch_op.f('match_results_ibfk_1'), 'match_requests', ['match_request_id'], ['id'], ondelete='CASCADE')
-        batch_op.create_foreign_key(batch_op.f('match_results_ibfk_2'), 'users', ['matched_user_id'], ['id'], ondelete='CASCADE')
+        batch_op.create_foreign_key('match_results_ibfk_1', 'match_requests', ['match_request_id'], ['id'], ondelete='CASCADE')
+        batch_op.create_foreign_key('match_results_ibfk_2', 'users', ['matched_user_id'], ['id'], ondelete='CASCADE')
         batch_op.alter_column('created_at',
                existing_type=sa.DateTime(),
                type_=mysql.TIMESTAMP(),
@@ -257,7 +250,7 @@ def downgrade():
 
     with op.batch_alter_table('match_requests', schema=None) as batch_op:
         batch_op.drop_constraint(None, type_='foreignkey')
-        batch_op.create_foreign_key(batch_op.f('match_requests_ibfk_1'), 'users', ['user_id'], ['id'], ondelete='CASCADE')
+        batch_op.create_foreign_key('match_requests_ibfk_1', 'users', ['user_id'], ['id'], ondelete='CASCADE')
         batch_op.alter_column('created_at',
                existing_type=sa.DateTime(),
                type_=mysql.TIMESTAMP(),
@@ -267,9 +260,9 @@ def downgrade():
     with op.batch_alter_table('interest_requests', schema=None) as batch_op:
         batch_op.drop_constraint(None, type_='foreignkey')
         batch_op.drop_constraint(None, type_='foreignkey')
-        batch_op.create_foreign_key(batch_op.f('interest_requests_ibfk_2'), 'users', ['target_user_id'], ['id'], ondelete='CASCADE')
-        batch_op.create_foreign_key(batch_op.f('interest_requests_ibfk_1'), 'users', ['requester_user_id'], ['id'], ondelete='CASCADE')
-        batch_op.create_index(batch_op.f('requester_user_id'), ['requester_user_id', 'target_user_id'], unique=True)
+        batch_op.create_foreign_key('interest_requests_ibfk_2', 'users', ['target_user_id'], ['id'], ondelete='CASCADE')
+        batch_op.create_foreign_key('interest_requests_ibfk_1', 'users', ['requester_user_id'], ['id'], ondelete='CASCADE')
+        batch_op.create_index('requester_user_id', ['requester_user_id', 'target_user_id'], unique=True)
 
     op.drop_table('coin_transactions')
     op.drop_table('user_subscriptions')

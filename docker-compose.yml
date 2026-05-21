@@ -10,6 +10,16 @@ services:
         condition: service_healthy
     restart: on-failure
 
+  frontend:
+    build: ../penzi-frontend
+    ports:
+      - "5173:5173"
+    command: npm run dev -- --host
+    environment:
+      - REACT_APP_API_URL=http://localhost:5173
+    depends_on:
+      - api
+
   db:
     image: mysql:8.0
     environment:
@@ -20,10 +30,11 @@ services:
     volumes:
       - mysql_data:/var/lib/mysql
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}"]
+      test: ["CMD", "mysql", "-u", "root", "-p${MYSQL_ROOT_PASSWORD}", "-e", "SELECT 1"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 30
+      start_period: 30s
 
 volumes:
   mysql_data:
