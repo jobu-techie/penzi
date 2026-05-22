@@ -4,7 +4,7 @@ pipeline {
     environment {
         BACKEND_REPO = 'https://github.com/jobu-techie/penzi.git'
         FRONTEND_REPO = 'https://github.com/jobu-techie/penzi-frontend.git'
-        DEPLOY_DIR = '/home/jmiyienda/penzi-deploy'
+        DEPLOY_DIR = '/opt/penzi-deploy'
     }
 
     stages {
