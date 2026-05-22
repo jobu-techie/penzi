@@ -11,28 +11,29 @@ pipeline {
 
         stage('Clone Repositories') {
             steps {
-                sh '''
-                    # Create deploy directory
-                    mkdir -p ${DEPLOY_DIR}
+                withCredentials([usernamePassword(credentialsId: 'github-credentials', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
+                    sh '''
+                        mkdir -p ${DEPLOY_DIR}
 
-                    # Clone or pull backend
-                    if [ -d "${DEPLOY_DIR}/penzi/.git" ]; then
-                        echo "Pulling latest backend..."
-                        cd ${DEPLOY_DIR}/penzi && git pull origin main
-                    else
-                        echo "Cloning backend..."
-                        git clone ${BACKEND_REPO} ${DEPLOY_DIR}/penzi
-                    fi
+                        # Clone or pull backend
+                        if [ -d "${DEPLOY_DIR}/penzi/.git" ]; then
+                            echo "Pulling latest backend..."
+                            cd ${DEPLOY_DIR}/penzi && git pull https://${GIT_USER}:${GIT_TOKEN}@github.com/jobu-techie/penzi.git main
+                        else
+                            echo "Cloning backend..."
+                            git clone https://${GIT_USER}:${GIT_TOKEN}@github.com/jobu-techie/penzi.git ${DEPLOY_DIR}/penzi
+                        fi
 
-                    # Clone or pull frontend
-                    if [ -d "${DEPLOY_DIR}/penzi-frontend/.git" ]; then
-                        echo "Pulling latest frontend..."
-                        cd ${DEPLOY_DIR}/penzi-frontend && git pull origin main
-                    else
-                        echo "Cloning frontend..."
-                        git clone ${FRONTEND_REPO} ${DEPLOY_DIR}/penzi-frontend
-                    fi
-                '''
+                        # Clone or pull frontend
+                        if [ -d "${DEPLOY_DIR}/penzi-frontend/.git" ]; then
+                            echo "Pulling latest frontend..."
+                            cd ${DEPLOY_DIR}/penzi-frontend && git pull https://${GIT_USER}:${GIT_TOKEN}@github.com/jobu-techie/penzi-frontend.git main
+                        else
+                            echo "Cloning frontend..."
+                            git clone https://${GIT_USER}:${GIT_TOKEN}@github.com/jobu-techie/penzi-frontend.git ${DEPLOY_DIR}/penzi-frontend
+                        fi
+                    '''
+                }
             }
         }
 
