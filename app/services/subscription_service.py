@@ -108,7 +108,7 @@ def seed_plans():
             },
             {
                 "name": "premium_monthly",
-                "price_kes": 299,
+                "price_kes": 50,
                 "duration_days": 30,
                 "daily_search_limit": -1,
                 "can_see_who_liked": True,
@@ -118,7 +118,7 @@ def seed_plans():
             },
             {
                 "name": "premium_quarterly",
-                "price_kes": 749,
+                "price_kes": 300,
                 "duration_days": 90,
                 "daily_search_limit": -1,
                 "can_see_who_liked": True,

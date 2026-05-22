@@ -15,7 +15,7 @@ def create_app():
     CORS(app)
     JWTManager(app)
 
-    # ✅ Import ALL models here so SQLAlchemy registers them
+    #  Import ALL models here so SQLAlchemy registers them
     with app.app_context():
         from app import models          # your main models (User, InterestRequest, etc.)
         from app import models_chat     # ChatMessage
@@ -33,10 +33,6 @@ def create_app():
     
     from app.routes_otp import otp_bp
     app.register_blueprint(otp_bp)
-
-    with app.app_context():
-        from app.services.subscription_service import seed_plans
-        seed_plans()
 
     @app.cli.command("seed-plans")
     def seed_plans_cmd():

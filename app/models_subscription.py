@@ -27,7 +27,7 @@ class SubscriptionPlan(db.Model):
         return {
             "id": self.id,
             "name": self.name,
-            "price_kes": self.price_kes,
+            "price": self.price_kes,
             "duration_days": self.duration_days,
             "daily_search_limit": self.daily_search_limit,
             "can_see_who_liked": self.can_see_who_liked,
