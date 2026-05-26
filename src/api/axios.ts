@@ -2,7 +2,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // ─── CHANGE THIS to match your environment ───────────────────────────────────
-const BASE_URL = 'http://10.0.2.2:5000';
+const BASE_URL = 'http://52.48.121.185:5000';
 //                       ↑ emulator
 // const BASE_URL = 'http://192.168.1.X:5000';   ← real device (your LAN IP)
 // ─────────────────────────────────────────────────────────────────────────────
