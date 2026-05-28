@@ -437,6 +437,13 @@ def auth_login():
     if not user.check_password(password):
         return jsonify({"error": "Incorrect password. Please try again."}), 401
     
+    if not user.is_active:
+        return jsonify({"error": "Account is inactive. Please contact support."}), 403
+    user.last_seen = datetime.now(timezone.utc)
+    user.is_online = True
+    user.last_login = datetime.now(timezone.utc)
+    db.session.commit()
+
     from datetime import datetime, timezone
     from app import db
     user.last_login = datetime.now(timezone.utc)
@@ -468,6 +475,25 @@ def admin_login():
 
     token = create_access_token(identity="admin")
     return jsonify({"token": token}), 200
+
+@bp.route("/auth/logout", methods=["POST"])
+def auth_logout():
+    from app.models import User
+    from app import db
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Invalid request"}), 400
+
+    phone = normalize_phone_number(data.get("phone_number", ""))
+    user = User.query.filter_by(phone_number=phone).first()
+    if not user:
+        return jsonify({"error": "User not found."}), 404
+
+    user.is_online = False
+    user.last_seen = datetime.now(timezone.utc)
+    db.session.commit()
+
+    return jsonify({"message": "Logged out successfully."}), 200
 
 
 @bp.route("/auth/reset-password", methods=["POST"])
@@ -664,7 +690,9 @@ def admin_get_users():
         "county": u.county,
         "town": u.town,
         "is_active": u.is_active,
+        "is_online": u.is_online,
         "last_login": u.last_login.isoformat() if u.last_login else None,
+        "last_seen": u.last_seen.isoformat() if u.last_seen else None,
         "created_at": u.created_at.isoformat() if u.created_at else None,
     } for u in users]), 200
 
