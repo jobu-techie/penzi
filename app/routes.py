@@ -417,6 +417,9 @@ def auth_register():
 def auth_login():
     from app.models import User
     from flask_jwt_extended import create_access_token
+    from datetime import datetime, timezone
+    from app import db
+
     data = request.get_json(silent=True)
     if not data:
         return jsonify({"error": "Invalid request"}), 400
@@ -436,26 +439,17 @@ def auth_login():
 
     if not user.check_password(password):
         return jsonify({"error": "Incorrect password. Please try again."}), 401
-    
+
     if not user.is_active:
-        return jsonify({"error": "Account is inactive. Please contact support."}), 403
+        return jsonify({"error": "Account is deactivated. Please contact support."}), 403
+
+    user.last_login = datetime.now(timezone.utc)
     user.last_seen = datetime.now(timezone.utc)
     user.is_online = True
-    user.last_login = datetime.now(timezone.utc)
-    db.session.commit()
-
-    from datetime import datetime, timezone
-    from app import db
-    user.last_login = datetime.now(timezone.utc)
     db.session.commit()
 
     token = create_access_token(identity=str(user.id))
-
-    return jsonify({
-        "token": token,
-        "user": user.to_dict()
-    }), 200
-
+    return jsonify({"token": token, "user": user.to_dict()}), 200
 
 @bp.route("/auth/admin-login", methods=["POST"])
 def admin_login():
@@ -753,7 +747,7 @@ def admin_toggle_user(user_id):
 
     user = User.query.get_or_404(user_id)
     user.is_active = not user.is_active
-    user.updtated_at = datetime.now(timezone.utc)
+    user.updated_at = datetime.now(timezone.utc)
     db.session.add(user)
     db.session.commit()
     db.session.refresh(user)
