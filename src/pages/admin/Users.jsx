@@ -4,7 +4,7 @@ import api from "../../api/axios";
 
 function Users() {
   const navigate = useNavigate();
-  const [allUsers, setAllUsers] = useState([]);   // source of truth — always full list
+  const [allUsers, setAllUsers] = useState([]);
   const [filtered, setFiltered] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -25,7 +25,6 @@ function Users() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // Always fetch from /admin/users (full data) and filter client-side
   const fetchUsers = async (currentSelected = selectedUser) => {
     setLoading(true);
     try {
@@ -36,7 +35,7 @@ function Users() {
       if (currentSelected) {
         const updated = data.find(u => u.id === currentSelected.id);
         if (updated) setSelectedUser(updated);
-        else setSelectedUser(null); // user was deleted
+        else setSelectedUser(null);
       }
     } catch {
       showToast("Failed to fetch users", "error");
@@ -45,7 +44,6 @@ function Users() {
     }
   };
 
-  // Filter the full list based on tab + search query
   const applyFilters = (data, tab, q) => {
     let result = tab === "active" ? data.filter(u => u.is_active) : data;
     if (q) {
@@ -62,30 +60,23 @@ function Users() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Re-apply filters whenever tab or search changes (no refetch needed)
   useEffect(() => {
     applyFilters(allUsers, activeTab, search);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab, search]);
 
-  const handleSearch = (e) => {
-    setSearch(e.target.value);
-  };
+  const handleSearch = (e) => setSearch(e.target.value);
 
   const handleToggleActive = async (user) => {
     try {
       const res = await api.post(`/admin/users/${user.id}/toggle`);
       const newStatus = res.data.is_active;
       showToast(`User ${newStatus ? "activated" : "deactivated"} successfully`);
-
-      // Update source-of-truth list instantly — no refetch needed
       const updatedAll = allUsers.map(u =>
         u.id === user.id ? { ...u, is_active: newStatus } : u
       );
       setAllUsers(updatedAll);
       applyFilters(updatedAll, activeTab, search);
-
-      // Keep selectedUser in sync
       if (selectedUser?.id === user.id) {
         setSelectedUser(prev => ({ ...prev, is_active: newStatus }));
       }
@@ -139,6 +130,18 @@ function Users() {
     }
   };
 
+  // Reusable online dot
+  const OnlineDot = ({ isOnline }) => (
+    <span className="flex items-center gap-1.5">
+      <span className={`inline-block w-2.5 h-2.5 rounded-full flex-shrink-0 ${
+        isOnline ? "bg-green-500 animate-pulse" : "bg-gray-300"
+      }`} />
+      <span className={`text-xs font-medium ${isOnline ? "text-green-600" : "text-gray-400"}`}>
+        {isOnline ? "Online" : "Offline"}
+      </span>
+    </span>
+  );
+
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Toast */}
@@ -175,7 +178,7 @@ function Users() {
       <div className="flex">
         {/* Left panel */}
         <div className={`${selectedUser ? "w-1/2" : "w-full"} p-6 transition-all`}>
-          {/* Tabs + Search */}
+          {/* Tabs */}
           <div className="flex gap-2 mb-4">
             {["all", "active"].map(tab => (
               <button
@@ -192,6 +195,7 @@ function Users() {
             ))}
           </div>
 
+          {/* Search */}
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-3 mb-4">
             <input
               type="text"
@@ -214,13 +218,14 @@ function Users() {
                     <th className="p-3 text-left">Name</th>
                     <th className="p-3 text-left">Phone</th>
                     <th className="p-3 text-left">Gender</th>
+                    <th className="p-3 text-left">Online</th>
                     <th className="p-3 text-left">Status</th>
                     <th className="p-3 text-left">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {filtered.length === 0 ? (
-                    <tr><td colSpan={5} className="p-8 text-center text-gray-400">No members found</td></tr>
+                    <tr><td colSpan={6} className="p-8 text-center text-gray-400">No members found</td></tr>
                   ) : filtered.map((user, i) => (
                     <tr
                       key={user.id}
@@ -241,6 +246,9 @@ function Users() {
                         ) : (
                           <span className="text-gray-300 text-xs">—</span>
                         )}
+                      </td>
+                      <td className="p-3">
+                        <OnlineDot isOnline={user.is_online} />
                       </td>
                       <td className="p-3">
                         <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
@@ -292,17 +300,37 @@ function Users() {
             </div>
 
             <div className="flex items-center gap-4 mb-6">
-              <div className="w-16 h-16 rounded-full bg-gradient-to-br from-pink-400 to-rose-500 flex items-center justify-center text-white text-2xl font-bold">
-                {selectedUser.name?.charAt(0)}
+              {/* Avatar with online dot */}
+              <div className="relative">
+                <div className="w-16 h-16 rounded-full bg-gradient-to-br from-pink-400 to-rose-500 flex items-center justify-center text-white text-2xl font-bold">
+                  {selectedUser.name?.charAt(0)}
+                </div>
+                <span className={`absolute bottom-0 right-0 w-4 h-4 rounded-full border-2 border-white ${
+                  selectedUser.is_online ? "bg-green-500" : "bg-gray-300"
+                }`} />
               </div>
               <div>
                 <h3 className="text-xl font-bold text-gray-800">{selectedUser.name}</h3>
                 <p className="text-gray-500 text-sm">{selectedUser.phone_number}</p>
-                <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                  selectedUser.is_active ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"
-                }`}>
-                  {selectedUser.is_active ? "Active" : "Inactive"}
-                </span>
+                <div className="flex items-center gap-2 mt-1.5">
+                  {/* Online/Offline pill */}
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold flex items-center gap-1 ${
+                    selectedUser.is_online
+                      ? "bg-green-100 text-green-700"
+                      : "bg-gray-100 text-gray-500"
+                  }`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${
+                      selectedUser.is_online ? "bg-green-500 animate-pulse" : "bg-gray-400"
+                    }`} />
+                    {selectedUser.is_online ? "Online" : "Offline"}
+                  </span>
+                  {/* Active/Inactive pill */}
+                  <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                    selectedUser.is_active ? "bg-green-100 text-green-700" : "bg-red-100 text-red-600"
+                  }`}>
+                    {selectedUser.is_active ? "Active" : "Inactive"}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -312,12 +340,13 @@ function Users() {
                 { label: "Gender", value: selectedUser.gender },
                 { label: "County", value: selectedUser.county },
                 { label: "Town", value: selectedUser.town },
-                { label: "Last Login", value: selectedUser.last_login ? new Date(selectedUser.last_login).toLocaleDateString() : "Never" },
+                { label: "Last Login", value: selectedUser.last_login ? new Date(selectedUser.last_login).toLocaleString() : "Never" },
+                { label: "Last Seen", value: selectedUser.last_seen ? new Date(selectedUser.last_seen).toLocaleString() : "Never" },
                 { label: "Joined", value: selectedUser.created_at ? new Date(selectedUser.created_at).toLocaleDateString() : "—" },
               ].map(({ label, value }) => (
                 <div key={label} className="bg-gray-50 rounded-xl p-3">
                   <p className="text-xs text-gray-400 mb-1">{label}</p>
-                  <p className="font-semibold text-gray-700">{value || "—"}</p>
+                  <p className="font-semibold text-gray-700 text-sm">{value || "—"}</p>
                 </div>
               ))}
             </div>
