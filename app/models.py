@@ -21,6 +21,8 @@ class User(db.Model):
     town = db.Column(db.String(100), nullable=False)
     phone_number = db.Column(db.String(20), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=True)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    last_login = db.Column(db.DateTime, nullable=True)
     profile_picture = db.Column(db.String(255), nullable=True)  # ← NEW
     created_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))

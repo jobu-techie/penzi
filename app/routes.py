@@ -643,3 +643,69 @@ def update_profile():
     db.session.commit()
 
     return jsonify({"message": "Profile updated successfully"}), 200
+
+    # Admin - Delete user
+@bp.route('/admin/users/<int:user_id>', methods=['DELETE'])
+def admin_delete_user(user_id):
+    user = User.query.get_or_404(user_id)
+    db.session.delete(user)
+    db.session.commit()
+    return jsonify({"message": "User deleted successfully"}), 200
+
+# Admin - Deactivate/Activate user
+@bp.route('/admin/users/<int:user_id>/toggle', methods=['POST'])
+def admin_toggle_user(user_id):
+    user = User.query.get_or_404(user_id)
+    user.is_active = not user.is_active
+    db.session.commit()
+    return jsonify({"message": "User updated", "is_active": user.is_active}), 200
+
+# Admin - Set password for user
+@bp.route('/admin/users/<int:user_id>/set-password', methods=['POST'])
+def admin_set_password(user_id):
+    user = User.query.get_or_404(user_id)
+    data = request.get_json(silent=True)
+    if not data or not data.get("password"):
+        return jsonify({"error": "Password required"}), 400
+    user.set_password(data["password"])
+    db.session.commit()
+    return jsonify({"message": "Password updated successfully"}), 200
+
+# Admin - Add user manually
+@bp.route('/admin/users', methods=['POST'])
+def admin_add_user():
+    from app.models import GenderEnum
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Invalid request"}), 400
+    required = ["name", "age", "gender", "county", "town", "phone_number"]
+    for field in required:
+        if not data.get(field):
+            return jsonify({"error": f"{field} is required"}), 400
+    existing = User.query.filter_by(phone_number=data["phone_number"]).first()
+    if existing:
+        return jsonify({"error": "Phone number already exists"}), 409
+    user = User(
+        name=data["name"],
+        age=data["age"],
+        gender=GenderEnum[data["gender"].upper()],
+        county=data["county"],
+        town=data["town"],
+        phone_number=data["phone_number"],
+    )
+    if data.get("password"):
+        user.set_password(data["password"])
+    db.session.add(user)
+    db.session.commit()
+    return jsonify({"message": "User added successfully", "id": user.id}), 201
+
+# Admin - Get active users
+@bp.route('/admin/users/active', methods=['GET'])
+def admin_active_users():
+    users = User.query.filter_by(is_active=True).all()
+    return jsonify([{
+        "id": u.id,
+        "name": u.name,
+        "phone_number": u.phone_number,
+        "last_login": u.last_login.isoformat() if u.last_login else None
+    } for u in users]), 200
