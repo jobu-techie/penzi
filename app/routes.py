@@ -644,37 +644,40 @@ def update_profile():
 
     return jsonify({"message": "Profile updated successfully"}), 200
 
-    # Admin - Delete user
-@bp.route('/admin/users/<int:user_id>', methods=['DELETE'])
-def admin_delete_user(user_id):
-    user = User.query.get_or_404(user_id)
-    db.session.delete(user)
-    db.session.commit()
-    return jsonify({"message": "User deleted successfully"}), 200
+  # ─── ADMIN ENDPOINTS ─────────────────────────────────────────────────────────
 
-# Admin - Deactivate/Activate user
-@bp.route('/admin/users/<int:user_id>/toggle', methods=['POST'])
-def admin_toggle_user(user_id):
-    user = User.query.get_or_404(user_id)
-    user.is_active = not user.is_active
-    db.session.commit()
-    return jsonify({"message": "User updated", "is_active": user.is_active}), 200
+@bp.route('/admin/users', methods=['GET'])
+def admin_get_users():
+    from app.models import User
+    users = User.query.all()
+    return jsonify([{
+        "id": u.id,
+        "name": u.name,
+        "phone_number": u.phone_number,
+        "age": u.age,
+        "gender": u.gender.value if u.gender else None,
+        "county": u.county,
+        "town": u.town,
+        "is_active": u.is_active,
+        "last_login": u.last_login.isoformat() if u.last_login else None,
+        "created_at": u.created_at.isoformat() if u.created_at else None,
+    } for u in users]), 200
 
-# Admin - Set password for user
-@bp.route('/admin/users/<int:user_id>/set-password', methods=['POST'])
-def admin_set_password(user_id):
-    user = User.query.get_or_404(user_id)
-    data = request.get_json(silent=True)
-    if not data or not data.get("password"):
-        return jsonify({"error": "Password required"}), 400
-    user.set_password(data["password"])
-    db.session.commit()
-    return jsonify({"message": "Password updated successfully"}), 200
+@bp.route('/admin/users/active', methods=['GET'])
+def admin_active_users():
+    from app.models import User
+    users = User.query.filter_by(is_active=True).all()
+    return jsonify([{
+        "id": u.id,
+        "name": u.name,
+        "phone_number": u.phone_number,
+        "last_login": u.last_login.isoformat() if u.last_login else None,
+    } for u in users]), 200
 
-# Admin - Add user manually
-@bp.route('/admin/users', methods=['POST'])
+@bp.route('/admin/users/add', methods=['POST'])
 def admin_add_user():
-    from app.models import GenderEnum
+    from app.models import User, GenderEnum
+    from app import db
     data = request.get_json(silent=True)
     if not data:
         return jsonify({"error": "Invalid request"}), 400
@@ -687,11 +690,12 @@ def admin_add_user():
         return jsonify({"error": "Phone number already exists"}), 409
     user = User(
         name=data["name"],
-        age=data["age"],
+        age=int(data["age"]),
         gender=GenderEnum[data["gender"].upper()],
         county=data["county"],
         town=data["town"],
         phone_number=data["phone_number"],
+        is_active=True,
     )
     if data.get("password"):
         user.set_password(data["password"])
@@ -699,13 +703,34 @@ def admin_add_user():
     db.session.commit()
     return jsonify({"message": "User added successfully", "id": user.id}), 201
 
-# Admin - Get active users
-@bp.route('/admin/users/active', methods=['GET'])
-def admin_active_users():
-    users = User.query.filter_by(is_active=True).all()
-    return jsonify([{
-        "id": u.id,
-        "name": u.name,
-        "phone_number": u.phone_number,
-        "last_login": u.last_login.isoformat() if u.last_login else None
-    } for u in users]), 200
+@bp.route('/admin/users/<int:user_id>', methods=['DELETE'])
+def admin_delete_user(user_id):
+    from app.models import User
+    from app import db
+    user = User.query.get_or_404(user_id)
+    db.session.delete(user)
+    db.session.commit()
+    return jsonify({"message": "User deleted successfully"}), 200
+
+@bp.route('/admin/users/<int:user_id>/toggle', methods=['POST'])
+def admin_toggle_user(user_id):
+    from app.models import User
+    from app import db
+    user = User.query.get_or_404(user_id)
+    user.is_active = not user.is_active
+    db.session.commit()
+    return jsonify({"message": "User updated", "is_active": user.is_active}), 200
+
+@bp.route('/admin/users/<int:user_id>/set-password', methods=['POST'])
+def admin_set_password(user_id):
+    from app.models import User
+    from app import db
+    user = User.query.get_or_404(user_id)
+    data = request.get_json(silent=True)
+    if not data or not data.get("password"):
+        return jsonify({"error": "Password required"}), 400
+    if len(data["password"]) < 6:
+        return jsonify({"error": "Password must be at least 6 characters"}), 400
+    user.set_password(data["password"])
+    db.session.commit()
+    return jsonify({"message": "Password updated successfully"}), 200
