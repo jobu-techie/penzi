@@ -441,7 +441,7 @@ def auth_login():
     from app import db
     user.last_login = datetime.now(timezone.utc)
     db.session.commit()
-    
+
     token = create_access_token(identity=str(user.id))
 
     return jsonify({
@@ -721,10 +721,16 @@ def admin_delete_user(user_id):
 def admin_toggle_user(user_id):
     from app.models import User
     from app import db
+    from datetime import datetime, timezone
+
     user = User.query.get_or_404(user_id)
     user.is_active = not user.is_active
+    user.updtated_at = datetime.now(timezone.utc)
+    db.session.add(user)
     db.session.commit()
-    return jsonify({"message": "User updated", "is_active": user.is_active}), 200
+    db.session.refresh(user)
+
+    return jsonify({"message": "User updated", "is_active": user.is_active, "id": user.id}), 200
 
 @bp.route('/admin/users/<int:user_id>/set-password', methods=['POST'])
 def admin_set_password(user_id):
