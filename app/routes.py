@@ -436,7 +436,12 @@ def auth_login():
 
     if not user.check_password(password):
         return jsonify({"error": "Incorrect password. Please try again."}), 401
-
+    
+    from datetime import datetime, timezone
+    from app import db
+    user.last_login = datetime.now(timezone.utc)
+    db.session.commit()
+    
     token = create_access_token(identity=str(user.id))
 
     return jsonify({
