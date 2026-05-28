@@ -4,7 +4,7 @@ import api from "../../api/axios";
 
 function Users() {
   const navigate = useNavigate();
-  const [users, setUsers] = useState([]);
+  const [allUsers, setAllUsers] = useState([]);   // source of truth — always full list
   const [filtered, setFiltered] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -14,7 +14,7 @@ function Users() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [actionUser, setActionUser] = useState(null);
   const [newPassword, setNewPassword] = useState("");
-  const [activeTab, setActiveTab] = useState("all"); // "all" | "active"
+  const [activeTab, setActiveTab] = useState("all");
   const [toast, setToast] = useState(null);
   const [addForm, setAddForm] = useState({
     name: "", age: "", gender: "MALE", county: "", town: "", phone_number: "", password: ""
@@ -25,38 +25,70 @@ function Users() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const fetchUsers = async () => {
+  // Always fetch from /admin/users (full data) and filter client-side
+  const fetchUsers = async (currentSelected = selectedUser) => {
     setLoading(true);
     try {
-      const endpoint = activeTab === "active" ? "/admin/users/active" : "/admin/users";
-      const res = await api.get(endpoint);
+      const res = await api.get("/admin/users");
       const data = Array.isArray(res.data) ? res.data : [];
-      setUsers(data);
-      setFiltered(data);
-    } catch (err) {
+      setAllUsers(data);
+      applyFilters(data, activeTab, search);
+      if (currentSelected) {
+        const updated = data.find(u => u.id === currentSelected.id);
+        if (updated) setSelectedUser(updated);
+        else setSelectedUser(null); // user was deleted
+      }
+    } catch {
       showToast("Failed to fetch users", "error");
     } finally {
       setLoading(false);
     }
   };
 
+  // Filter the full list based on tab + search query
+  const applyFilters = (data, tab, q) => {
+    let result = tab === "active" ? data.filter(u => u.is_active) : data;
+    if (q) {
+      const lower = q.toLowerCase();
+      result = result.filter(u =>
+        u.name?.toLowerCase().includes(lower) || u.phone_number?.includes(lower)
+      );
+    }
+    setFiltered(result);
+  };
+
   useEffect(() => {
     fetchUsers();
-  }, [activeTab]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Re-apply filters whenever tab or search changes (no refetch needed)
+  useEffect(() => {
+    applyFilters(allUsers, activeTab, search);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTab, search]);
 
   const handleSearch = (e) => {
-    const q = e.target.value.toLowerCase();
     setSearch(e.target.value);
-    setFiltered(users.filter(u =>
-      u.name?.toLowerCase().includes(q) || u.phone_number?.includes(q)
-    ));
   };
 
   const handleToggleActive = async (user) => {
     try {
       const res = await api.post(`/admin/users/${user.id}/toggle`);
-      showToast(`User ${res.data.is_active ? "activated" : "deactivated"} successfully`);
-      fetchUsers();
+      const newStatus = res.data.is_active;
+      showToast(`User ${newStatus ? "activated" : "deactivated"} successfully`);
+
+      // Update source-of-truth list instantly — no refetch needed
+      const updatedAll = allUsers.map(u =>
+        u.id === user.id ? { ...u, is_active: newStatus } : u
+      );
+      setAllUsers(updatedAll);
+      applyFilters(updatedAll, activeTab, search);
+
+      // Keep selectedUser in sync
+      if (selectedUser?.id === user.id) {
+        setSelectedUser(prev => ({ ...prev, is_active: newStatus }));
+      }
     } catch {
       showToast("Failed to update user", "error");
     }
@@ -85,7 +117,7 @@ function Users() {
       setShowDeleteConfirm(false);
       setActionUser(null);
       setSelectedUser(null);
-      fetchUsers();
+      fetchUsers(null);
     } catch {
       showToast("Failed to delete user", "error");
     }
@@ -141,7 +173,7 @@ function Users() {
       </div>
 
       <div className="flex">
-        {/* Left panel - list */}
+        {/* Left panel */}
         <div className={`${selectedUser ? "w-1/2" : "w-full"} p-6 transition-all`}>
           {/* Tabs + Search */}
           <div className="flex gap-2 mb-4">
@@ -200,11 +232,15 @@ function Users() {
                       <td className="p-3 font-medium text-gray-800">{user.name}</td>
                       <td className="p-3 text-gray-500">{user.phone_number}</td>
                       <td className="p-3">
-                        <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
-                          user.gender === "MALE" || user.gender === "Male"
-                            ? "bg-blue-100 text-blue-700"
-                            : "bg-pink-100 text-pink-700"
-                        }`}>{user.gender}</span>
+                        {user.gender ? (
+                          <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                            user.gender?.toUpperCase() === "MALE"
+                              ? "bg-blue-100 text-blue-700"
+                              : "bg-pink-100 text-pink-700"
+                          }`}>{user.gender}</span>
+                        ) : (
+                          <span className="text-gray-300 text-xs">—</span>
+                        )}
                       </td>
                       <td className="p-3">
                         <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
