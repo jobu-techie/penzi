@@ -66,6 +66,8 @@ def request_otp():
         return jsonify({"error": "No password set. Please set a password first."}), 403
     if not user.check_password(password):
         return jsonify({"error": "Incorrect password. Please try again."}), 401
+    if not user.is_active:
+        return jsonify({"error": "Your account has been deactivated. Please contact support."}), 403
 
     # Invalidate old OTPs
     OTP.query.filter_by(user_id=user.id, used=False).delete()
@@ -87,7 +89,7 @@ def request_otp():
     is_sandbox = os.getenv("AT_USERNAME", "sandbox") == "sandbox"
 
     response = {
-        "message": f"OTP sent. Valid for 5 minutes.",
+        "message": "OTP sent. Valid for 5 minutes.",
         "otp_id": otp.id,
     }
     if is_sandbox:
@@ -129,9 +131,19 @@ def verify_otp():
     otp.used = True
     db.session.commit()
 
-    user  = User.query.get(otp.user_id)
-    token = create_access_token(identity=str(user.id))
+    user = User.query.get(otp.user_id)
+    if not user:
+        return jsonify({"error": "User not found."}), 404
 
+    if not user.is_active:
+        return jsonify({"error": "Your account has been deactivated. Please contact support."}), 403
+
+    user.last_login = datetime.now(timezone.utc)
+    user.last_seen = datetime.now(timezone.utc)
+    user.is_online = True
+    db.session.commit()
+
+    token = create_access_token(identity=str(user.id))
     return jsonify({"message": "Login successful.", "token": token, "user": user.to_dict()}), 200
 
 
@@ -150,6 +162,9 @@ def resend_otp():
     user = User.query.get(old_otp.user_id)
     if not user:
         return jsonify({"error": "User not found."}), 404
+
+    if not user.is_active:
+        return jsonify({"error": "Your account has been deactivated. Please contact support."}), 403
 
     old_otp.used = True
     db.session.flush()
