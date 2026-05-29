@@ -441,7 +441,7 @@ def auth_login():
         return jsonify({"error": "Incorrect password. Please try again."}), 401
 
     if not user.is_active:
-        return jsonify({"error": "Account is deactivated. Please contact support."}), 403
+        return jsonify({"error": "Your account has been deactivated. Please contact support."}), 403
 
     user.last_login = datetime.now(timezone.utc)
     user.last_seen = datetime.now(timezone.utc)
