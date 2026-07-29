@@ -224,6 +224,13 @@ function Register() {
                 value={form.age}
                 onChange={(e) => {
                   const val = e.target.value.replace(/\D/g, "").slice(0, 2);
+                  // Once two digits are entered, reject the value outright if
+                  // it's under 18 (all valid ages are two digits, so a
+                  // one-digit value can't be judged yet and is left alone).
+                  if (val.length === 2 && parseInt(val, 10) < 18) {
+                    setForm((f) => ({ ...f }));
+                    return;
+                  }
                   setForm({ ...form, age: val });
                 }}
                 className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300"

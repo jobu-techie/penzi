@@ -925,10 +925,26 @@ function Matches() {
                 <div>
                   <div className="flex gap-4">
                     <input placeholder="Min Age" type="number" inputMode="numeric" min="18" max="99" value={ageMin}
-                      onChange={(e) => setAgeMin(e.target.value.replace(/\D/g, "").slice(0, 2))}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, "").slice(0, 2);
+                        // Once two digits are entered, reject values under 18
+                        // outright instead of just warning after the fact.
+                        if (val.length === 2 && parseInt(val, 10) < 18) {
+                          e.target.value = ageMin;
+                          return;
+                        }
+                        setAgeMin(val);
+                      }}
                       className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300" />
                     <input placeholder="Max Age" type="number" inputMode="numeric" min="18" max="99" value={ageMax}
-                      onChange={(e) => setAgeMax(e.target.value.replace(/\D/g, "").slice(0, 2))}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, "").slice(0, 2);
+                        if (val.length === 2 && parseInt(val, 10) < 18) {
+                          e.target.value = ageMax;
+                          return;
+                        }
+                        setAgeMax(val);
+                      }}
                       className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300" />
                   </div>
                   {(ageMin && parseInt(ageMin, 10) < 18) || (ageMax && parseInt(ageMax, 10) < 18) ? (
