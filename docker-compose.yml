@@ -14,9 +14,11 @@ services:
     build: ../penzi-frontend
     ports:
       - "5173:5173"
-    command: npm run dev -- --host
-    environment:
-      - REACT_APP_API_URL=http://localhost:5173
+    # No command/environment override here — the Dockerfile builds a
+    # production bundle and serves it. VITE_API_URL/VITE_WEBHOOK_TOKEN are
+    # baked in at build time, so ../penzi-frontend/.env must exist on the
+    # host *before* `docker compose build` runs (env vars set here at
+    # container-runtime are too late for Vite's build step).
     depends_on:
       - api
 
