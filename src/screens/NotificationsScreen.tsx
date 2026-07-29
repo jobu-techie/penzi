@@ -6,6 +6,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../api/axios';
+import { clearToken } from '../utils/tokenStorage';
 import { COLORS, SHADOWS, hashPhone } from '../theme';
 
 export default function NotificationsScreen({ navigation }) {
@@ -53,9 +54,7 @@ export default function NotificationsScreen({ navigation }) {
   const handleRespond = async (id, response) => {
     setResponding(p => ({ ...p, [id]: true }));
     try {
-      await api.post('/webhook/onfon', { sender: phone, message: response }, {
-        headers: { 'X-Webhook-Token': 'jobu' },
-      });
+      await api.post('/webhook/onfon', { sender: phone, message: response });
       setInterests(p => p.filter(i => i.interest_request_id !== id));
     } catch {}
     finally { setResponding(p => ({ ...p, [id]: false })); }
@@ -68,7 +67,8 @@ export default function NotificationsScreen({ navigation }) {
   };
 
   const handleLogout = async () => {
-    await AsyncStorage.multiRemove(['penzi_token', 'penzi_user']);
+    await clearToken();
+    await AsyncStorage.removeItem('penzi_user');
     navigation.replace('Login');
   };
 

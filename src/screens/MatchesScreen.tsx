@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../api/axios';
+import { clearToken } from '../utils/tokenStorage';
 import { COLORS, SHADOWS } from '../theme';
 
 // ── Constants ────────────────────────────────────────────────────────────────
@@ -664,7 +665,7 @@ const fetchSubscription = useCallback(async () => {
   }, [phone]);
 
   // ── SMS helpers ──
-  const sendSms = (msg) => api.post('/webhook/onfon', { sender: phone, message: msg }, { headers: { 'X-Webhook-Token': 'jobu' } });
+  const sendSms = (msg) => api.post('/webhook/onfon', { sender: phone, message: msg });
 
   const parseMatches = (text) =>
     text.split('\n')
@@ -780,7 +781,7 @@ const fetchSubscription = useCallback(async () => {
   };
 
   const handleLogout = async () => {
-    await AsyncStorage.removeItem('penzi_token');
+    await clearToken();
     await AsyncStorage.removeItem('penzi_user');
     navigation.replace('Login');
   };

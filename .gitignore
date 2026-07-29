@@ -35,6 +35,9 @@ local.properties
 !debug.keystore
 .kotlin/
 
+# Contains real release-signing credentials — never commit.
+android/gradle.properties
+
 # node.js
 #
 node_modules/

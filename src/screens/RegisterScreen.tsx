@@ -37,9 +37,7 @@ export default function RegisterScreen({ navigation }) {
   const set = (key, val) => setForm(f => ({ ...f, [key]: val }));
 
   const sendSms = async (message) =>
-    api.post('/webhook/onfon', { sender: form.phone, message }, {
-      headers: { 'X-Webhook-Token': 'jobu' },
-    });
+    api.post('/webhook/onfon', { sender: form.phone, message });
 
   const handleStep1 = async () => {
     if (!form.phone || !form.name || !form.age || !form.county || !form.town) {

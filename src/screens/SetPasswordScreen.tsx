@@ -4,9 +4,7 @@ import {
   ScrollView, ActivityIndicator, Alert,
 } from "react-native";
 import { useNavigation, useRoute } from "@react-navigation/native";
-import axios from "axios";
-
-const API_URL = "http://10.0.2.2:5000";
+import api from "../api/axios";
 
 export default function SetPasswordScreen() {
   const navigation = useNavigation();
@@ -41,7 +39,7 @@ export default function SetPasswordScreen() {
     setLoading(true);
     setError("");
     try {
-      await axios.post(`${API_URL}/auth/register`, {
+      await api.post("/auth/register", {
         phone_number: phone,
         password: password,
       });

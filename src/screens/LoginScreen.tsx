@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import api from '../api/axios';
+import { setToken } from '../utils/tokenStorage';
 import { COLORS, SHADOWS } from '../theme';
 
 // ── OTP Input — 6 individual boxes ───────────────────────────────────────────
@@ -210,8 +211,9 @@ export default function LoginScreen({ navigation, route }) {
 
       const { token, user } = res.data;
 
-      // Mirror exactly what the web app stores in localStorage
-      await AsyncStorage.setItem('penzi_token', token);
+      // Token goes to the Keychain (encrypted); user profile is non-sensitive
+      // display data cached in AsyncStorage, mirroring the web app's localStorage.
+      await setToken(token);
       await AsyncStorage.setItem('penzi_user', JSON.stringify(user));
 
       navigation.replace('Matches');
@@ -376,8 +378,8 @@ export default function LoginScreen({ navigation, route }) {
                 <Text style={styles.otpExpiry}>Valid for 5 minutes</Text>
               </View>
 
-              {/* Sandbox dev OTP helper — remove in production */}
-              {devOtp ? (
+              {/* Sandbox dev OTP helper — only ever renders in a __DEV__ build */}
+              {__DEV__ && devOtp ? (
                 <View style={styles.devBox}>
                   <Text style={styles.devLabel}>🧪 Sandbox — your OTP:</Text>
                   <Text style={styles.devOtp}>{devOtp}</Text>
