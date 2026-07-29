@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../../api/axios";
 import { KENYA_COUNTIES } from "../../constants/counties";
+import { TOWNS_BY_COUNTY } from "../../constants/towns";
 
 function Register() {
   const navigate = useNavigate();
@@ -11,6 +12,7 @@ function Register() {
   const [error, setError] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [useOtherTown, setUseOtherTown] = useState(false);
 
   const [form, setForm] = useState({
     phone: "",
@@ -244,14 +246,45 @@ function Register() {
               <option value="Male">Male</option>
               <option value="Female">Female</option>
             </select>
-            <select name="county" value={form.county} onChange={handleChange}
+            <select
+              name="county"
+              value={form.county}
+              onChange={(e) => {
+                setForm({ ...form, county: e.target.value, town: "" });
+                setUseOtherTown(false);
+              }}
               className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300 text-gray-700">
               <option value="">Select County</option>
               {KENYA_COUNTIES.map((c) => <option key={c} value={c}>{c}</option>)}
             </select>
-            <input name="town" placeholder="Town"
-              value={form.town} onChange={handleChange}
-              className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300" />
+            {useOtherTown ? (
+              <input
+                name="town"
+                placeholder="Type your town"
+                value={form.town}
+                onChange={handleChange}
+                className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300"
+              />
+            ) : (
+              <select
+                value={form.town}
+                disabled={!form.county}
+                onChange={(e) => {
+                  if (e.target.value === "__other__") {
+                    setUseOtherTown(true);
+                    setForm({ ...form, town: "" });
+                  } else {
+                    setForm({ ...form, town: e.target.value });
+                  }
+                }}
+                className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300 text-gray-700 disabled:bg-gray-100 disabled:text-gray-400">
+                <option value="">{form.county ? "Select Town" : "Select a county first"}</option>
+                {(TOWNS_BY_COUNTY[form.county] || []).map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
+                {form.county && <option value="__other__">Other (type manually)</option>}
+              </select>
+            )}
             <button
               onClick={handleStep1}
               disabled={loading || (form.age !== "" && parseInt(form.age, 10) < 18)}
