@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../../api/axios";
+import { KENYA_COUNTIES } from "../../constants/counties";
 
 function Register() {
   const navigate = useNavigate();
@@ -36,8 +37,6 @@ function Register() {
     return await api.post("/webhook/onfon", {
       sender: form.phone,
       message,
-    }, {
-      headers: { "X-Webhook-Token": "jobu" },
     });
   };
 
@@ -214,32 +213,41 @@ function Register() {
             <input name="name" placeholder="Full Name"
               value={form.name} onChange={handleChange}
               className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300" />
-            <input
-              name="age"
-              placeholder="Age (must be 18+)"
-              type="number"
-              inputMode="numeric"
-              min="18"
-              max="99"
-              value={form.age}
-              onChange={(e) => {
-                const val = e.target.value.replace(/\D/g, "").slice(0, 2);
-                setForm({ ...form, age: val });
-              }}
-              className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300"
-            />
+            <div>
+              <input
+                name="age"
+                placeholder="Age (must be 18+)"
+                type="number"
+                inputMode="numeric"
+                min="18"
+                max="99"
+                value={form.age}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, "").slice(0, 2);
+                  setForm({ ...form, age: val });
+                }}
+                className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300"
+              />
+              {form.age && parseInt(form.age, 10) < 18 && (
+                <p className="text-red-500 text-xs mt-1">You must be at least 18 years old to register.</p>
+              )}
+            </div>
             <select name="gender" value={form.gender} onChange={handleChange}
               className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300">
               <option value="Male">Male</option>
               <option value="Female">Female</option>
             </select>
-            <input name="county" placeholder="County"
-              value={form.county} onChange={handleChange}
-              className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300" />
+            <select name="county" value={form.county} onChange={handleChange}
+              className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300 text-gray-700">
+              <option value="">Select County</option>
+              {KENYA_COUNTIES.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
             <input name="town" placeholder="Town"
               value={form.town} onChange={handleChange}
               className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300" />
-            <button onClick={handleStep1} disabled={loading}
+            <button
+              onClick={handleStep1}
+              disabled={loading || (form.age !== "" && parseInt(form.age, 10) < 18)}
               className="w-full bg-pink-600 text-white py-3 rounded-lg font-bold hover:bg-pink-700 transition disabled:opacity-60">
               {loading ? "Saving..." : "Next"}
             </button>

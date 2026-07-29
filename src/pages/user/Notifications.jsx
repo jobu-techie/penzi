@@ -49,8 +49,6 @@ function Notifications() {
       await api.post("/webhook/onfon", {
         sender: phone,
         message: response,
-      }, {
-        headers: { "X-Webhook-Token": "jobu" },
       });
       setInterests(prev => prev.filter(i => i.interest_request_id !== interestRequestId));
     } catch (err) {

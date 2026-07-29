@@ -1,19 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import api from "../../api/axios";
-
-const KENYA_COUNTIES = [
-  "Baringo", "Bomet", "Bungoma", "Busia", "Elgeyo Marakwet",
-  "Embu", "Garissa", "Homa Bay", "Isiolo", "Kajiado",
-  "Kakamega", "Kericho", "Kiambu", "Kilifi", "Kirinyaga",
-  "Kisii", "Kisumu", "Kitui", "Kwale", "Laikipia",
-  "Lamu", "Machakos", "Makueni", "Mandera", "Marsabit",
-  "Meru", "Migori", "Mombasa", "Murang'a", "Nairobi",
-  "Nakuru", "Nandi", "Narok", "Nyamira", "Nyandarua",
-  "Nyeri", "Samburu", "Siaya", "Taita Taveta", "Tana River",
-  "Tharaka Nithi", "Trans Nzoia", "Turkana", "Uasin Gishu",
-  "Vihiga", "Wajir", "West Pokot"
-];
+import api, { API_BASE_URL } from "../../api/axios";
+import { KENYA_COUNTIES } from "../../constants/counties";
 
 const hashPhone = (phone) => {
   if (!phone) return "";
@@ -580,7 +568,7 @@ function Matches() {
       const res = await api.get(`/users/phone/${phone}`);
       setProfileData(res.data);
       if (res.data?.profile_picture) {
-        setProfilePicturePreview(`http://localhost:5000${res.data.profile_picture}`);
+        setProfilePicturePreview(`${API_BASE_URL}${res.data.profile_picture}`);
       }
     } catch (err) {
       console.error("Failed to fetch profile", err);
@@ -606,9 +594,7 @@ function Matches() {
   // ── SMS helpers ────────────────────────────────────────────────────────────
 
   const sendSms = async (msg) =>
-    await api.post("/webhook/onfon", { sender: phone, message: msg }, {
-      headers: { "X-Webhook-Token": "jobu" },
-    });
+    await api.post("/webhook/onfon", { sender: phone, message: msg });
 
   const parseMatches = (text) => {
     const lines = text.split("\n").filter(line => line.includes("aged") && line.includes(","));
@@ -622,6 +608,16 @@ function Matches() {
 
   const handleSearch = async () => {
     if (!ageMin || !ageMax || !county) { setMessage("Please fill in all fields."); return; }
+    const minAge = parseInt(ageMin, 10);
+    const maxAge = parseInt(ageMax, 10);
+    if (isNaN(minAge) || minAge < 18 || isNaN(maxAge) || maxAge < 18) {
+      setMessage("Both ages must be 18 or older.");
+      return;
+    }
+    if (minAge > maxAge) {
+      setMessage("Minimum age cannot be greater than maximum age.");
+      return;
+    }
     if (subscription?.plan === "free" && subscription?.searches_used >= subscription?.searches_limit) {
       setShowSubscribeModal(true);
       return;
@@ -753,7 +749,7 @@ function Matches() {
       formData.append("phone", phone);
       const res = await api.post("/users/profile-picture", formData);
       setPicMessage("Profile picture updated successfully!");
-      setProfilePicturePreview(`http://127.0.0.1:5000${res.data.profile_picture}`);
+      setProfilePicturePreview(`${API_BASE_URL}${res.data.profile_picture}`);
       setProfilePicture(null);
     } catch (err) {
       setPicMessage(err.response?.data?.message || "Failed to upload picture. Please try again.");
@@ -926,13 +922,20 @@ function Matches() {
                   <p className="text-sm text-gray-500">Searching as</p>
                   <p className="font-semibold text-pink-600">{currentUser?.name}</p>
                 </div>
-                <div className="flex gap-4">
-                  <input placeholder="Min Age" type="number" inputMode="numeric" min="18" max="99" value={ageMin}
-                    onChange={(e) => setAgeMin(e.target.value.replace(/\D/g, "").slice(0, 2))}
-                    className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300" />
-                  <input placeholder="Max Age" type="number" inputMode="numeric" min="18" max="99" value={ageMax}
-                    onChange={(e) => setAgeMax(e.target.value.replace(/\D/g, "").slice(0, 2))}
-                    className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300" />
+                <div>
+                  <div className="flex gap-4">
+                    <input placeholder="Min Age" type="number" inputMode="numeric" min="18" max="99" value={ageMin}
+                      onChange={(e) => setAgeMin(e.target.value.replace(/\D/g, "").slice(0, 2))}
+                      className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300" />
+                    <input placeholder="Max Age" type="number" inputMode="numeric" min="18" max="99" value={ageMax}
+                      onChange={(e) => setAgeMax(e.target.value.replace(/\D/g, "").slice(0, 2))}
+                      className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300" />
+                  </div>
+                  {(ageMin && parseInt(ageMin, 10) < 18) || (ageMax && parseInt(ageMax, 10) < 18) ? (
+                    <p className="text-red-500 text-xs mt-1">Both ages must be 18 or older.</p>
+                  ) : ageMin && ageMax && parseInt(ageMin, 10) > parseInt(ageMax, 10) ? (
+                    <p className="text-red-500 text-xs mt-1">Minimum age cannot be greater than maximum age.</p>
+                  ) : null}
                 </div>
                 <select value={county} onChange={(e) => setCounty(e.target.value)}
                   className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300 text-gray-700">
@@ -944,7 +947,10 @@ function Matches() {
                     🔒 Upgrade to Search
                   </button>
                 ) : (
-                  <button onClick={handleSearch} disabled={loading} className="w-full bg-pink-600 text-white py-3 rounded-lg font-bold hover:bg-pink-700 transition disabled:opacity-60">
+                  <button
+                    onClick={handleSearch}
+                    disabled={loading || !ageMin || !ageMax || parseInt(ageMin, 10) < 18 || parseInt(ageMax, 10) < 18 || parseInt(ageMin, 10) > parseInt(ageMax, 10)}
+                    className="w-full bg-pink-600 text-white py-3 rounded-lg font-bold hover:bg-pink-700 transition disabled:opacity-60">
                     {loading ? "Searching..." : "Search Matches"}
                   </button>
                 )}

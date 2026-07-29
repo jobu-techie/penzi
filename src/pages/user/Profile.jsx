@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import api from "../../api/axios";
+import api, { API_BASE_URL } from "../../api/axios";
 
 // ── Subscription Modal (inline, lightweight) ──────────────────────────────────
 function SubscribePrompt({ phone, onClose }) {
@@ -9,7 +9,7 @@ function SubscribePrompt({ phone, onClose }) {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    api.get("/subscriptions/plans")
+    api.get("/subscription/plans")
       .then(res => setPlans(res.data.filter(p => p.name !== "free")))
       .catch(() => setMessage("Could not load plans."));
   }, []);
@@ -18,7 +18,7 @@ function SubscribePrompt({ phone, onClose }) {
     setPaying(planId);
     setMessage("");
     try {
-      await api.post("/subscribe", { plan_id: planId, phone_number: phone });
+      await api.post("/subscription/subscribe", { plan_id: planId, phone_number: phone });
       setMessage("✅ M-Pesa prompt sent! Enter your PIN on your phone.");
     } catch (err) {
       setMessage(err.response?.data?.message || "Payment failed. Please try again.");
@@ -100,7 +100,9 @@ function Profile() {
     const fetchSubscription = async () => {
       if (!senderPhone) return;
       try {
-        const res = await api.get(`/subscriptions/status/${senderPhone}`);
+        // JWT-scoped (identifies the caller from the Authorization header,
+        // not the phone number) — matches the pattern used in Matches.jsx.
+        const res = await api.get("/subscription/subscription/status");
         setSubscription(res.data);
       } catch (err) {
         console.error("Failed to fetch subscription", err);
@@ -122,8 +124,6 @@ function Profile() {
       const res = await api.post("/webhook/onfon", {
         sender: senderPhone,
         message: phone,
-      }, {
-        headers: { "X-Webhook-Token": "jobu" },
       });
       setInterestSent(true);
       setInterestMessage(res.data);
@@ -153,7 +153,7 @@ function Profile() {
 
   const isPremium = subscription?.plan && subscription.plan !== "free";
   const profilePicUrl = profile.profile_picture
-    ? `http://localhost:5000${profile.profile_picture}`
+    ? `${API_BASE_URL}${profile.profile_picture}`
     : null;
 
   const fields = [
