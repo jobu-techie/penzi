@@ -1,3 +1,5 @@
+from functools import wraps
+
 from flask import Blueprint, current_app, jsonify, request
 from werkzeug.utils import secure_filename
 import os
@@ -29,8 +31,22 @@ from app.services.user_service import (
     get_user_profile,
 )
 from app.services.subscription_service import check_search_limit, increment_search_count
+from app.extensions import limiter
 
 bp = Blueprint("routes", __name__)
+
+
+def require_admin(fn):
+    @wraps(fn)
+    def wrapper(*args, **kwargs):
+        from flask_jwt_extended import verify_jwt_in_request, get_jwt_identity
+
+        verify_jwt_in_request()
+        if get_jwt_identity() != "admin":
+            return jsonify({"error": "Admin access required"}), 403
+        return fn(*args, **kwargs)
+
+    return wrapper
 
 
 @bp.route("/", methods=["GET"])
@@ -179,6 +195,7 @@ def respond_to_interest():
 
 
 @bp.route("/webhook/onfon", methods=["POST"])
+@limiter.limit("20/minute")
 def onfon_webhook():
     expected_token = current_app.config.get("ONFON_WEBHOOK_TOKEN")
     incoming_token = (
@@ -200,6 +217,30 @@ def onfon_webhook():
         return "sender and message are required", 400, {
             "Content-Type": "text/plain; charset=utf-8"
         }
+
+    # If this call carries a valid user JWT (i.e. it's a logged-in app user
+    # simulating SMS through this endpoint, not a genuine Onfon inbound
+    # message), the sender must be that user's own phone number — never
+    # whatever the client claims in the payload. This prevents anyone who
+    # knows the static webhook token from acting as an arbitrary phone number.
+    bearer_prefix = "Bearer "
+    auth_header = request.headers.get("Authorization", "")
+    if auth_header.startswith(bearer_prefix):
+        raw_jwt = auth_header[len(bearer_prefix):].strip()
+        try:
+            from flask_jwt_extended import decode_token
+            from app.models import User
+
+            identity = decode_token(raw_jwt).get("sub")
+            authenticated_user = (
+                User.query.get(int(identity))
+                if identity and identity != "admin"
+                else None
+            )
+            if authenticated_user:
+                sender = authenticated_user.phone_number
+        except Exception:
+            pass
 
     log_incoming_sms(sender, shortcode, message)
 
@@ -414,6 +455,7 @@ def auth_register():
 
 
 @bp.route("/auth/login", methods=["POST"])
+@limiter.limit("5/minute")
 def auth_login():
     from app.models import User
     from flask_jwt_extended import create_access_token
@@ -452,8 +494,11 @@ def auth_login():
     return jsonify({"token": token, "user": user.to_dict()}), 200
 
 @bp.route("/auth/admin-login", methods=["POST"])
+@limiter.limit("5/minute")
 def admin_login():
     from flask_jwt_extended import create_access_token
+    from werkzeug.security import check_password_hash
+
     data = request.get_json(silent=True)
     if not data:
         return jsonify({"error": "Invalid request"}), 400
@@ -461,10 +506,15 @@ def admin_login():
     username = data.get("username", "").strip()
     password = data.get("password", "").strip()
 
-    ADMIN_USERNAME = "job"
-    ADMIN_PASSWORD = "Jobdiaz@18"
+    admin_username = current_app.config.get("ADMIN_USERNAME")
+    admin_password_hash = current_app.config.get("ADMIN_PASSWORD_HASH")
 
-    if username != ADMIN_USERNAME or password != ADMIN_PASSWORD:
+    if (
+        not admin_username
+        or not admin_password_hash
+        or username != admin_username
+        or not check_password_hash(admin_password_hash, password)
+    ):
         return jsonify({"error": "Invalid admin credentials."}), 401
 
     token = create_access_token(identity="admin")
@@ -672,6 +722,7 @@ def update_profile():
   # ─── ADMIN ENDPOINTS ─────────────────────────────────────────────────────────
 
 @bp.route('/admin/users', methods=['GET'])
+@require_admin
 def admin_get_users():
     from app.models import User
     users = User.query.all()
@@ -691,6 +742,7 @@ def admin_get_users():
     } for u in users]), 200
 
 @bp.route('/admin/users/active', methods=['GET'])
+@require_admin
 def admin_active_users():
     from app.models import User
     users = User.query.filter_by(is_active=True).all()
@@ -702,6 +754,7 @@ def admin_active_users():
     } for u in users]), 200
 
 @bp.route('/admin/users/add', methods=['POST'])
+@require_admin
 def admin_add_user():
     from app.models import User, GenderEnum
     from app import db
@@ -731,6 +784,7 @@ def admin_add_user():
     return jsonify({"message": "User added successfully", "id": user.id}), 201
 
 @bp.route('/admin/users/<int:user_id>', methods=['DELETE'])
+@require_admin
 def admin_delete_user(user_id):
     from app.models import User
     from app import db
@@ -740,6 +794,7 @@ def admin_delete_user(user_id):
     return jsonify({"message": "User deleted successfully"}), 200
 
 @bp.route('/admin/users/<int:user_id>/toggle', methods=['POST'])
+@require_admin
 def admin_toggle_user(user_id):
     from app.models import User
     from app import db
@@ -755,6 +810,7 @@ def admin_toggle_user(user_id):
     return jsonify({"message": "User updated", "is_active": user.is_active, "id": user.id}), 200
 
 @bp.route('/admin/users/<int:user_id>/set-password', methods=['POST'])
+@require_admin
 def admin_set_password(user_id):
     from app.models import User
     from app import db

@@ -1,3 +1,4 @@
+import os
 import random
 import string
 from datetime import datetime, timezone, timedelta
@@ -5,7 +6,7 @@ from datetime import datetime, timezone, timedelta
 from flask import Blueprint, jsonify, request
 from flask_jwt_extended import create_access_token
 
-from app.extensions import db
+from app.extensions import db, limiter
 from app.models import User
 from app.models_otp import OTP
 from app.services.onfon_service import normalize_phone_number
@@ -15,6 +16,14 @@ otp_bp = Blueprint("otp", __name__, url_prefix="/auth")
 
 def _generate_otp(length=6):
     return "".join(random.choices(string.digits, k=length))
+
+
+def _dev_otp_visible() -> bool:
+    """Only expose _dev_otp when explicitly in sandbox AND not a production deploy."""
+    return (
+        os.getenv("AT_USERNAME", "sandbox") == "sandbox"
+        and os.getenv("FLASK_ENV", "development") != "production"
+    )
 
 
 def _send_otp_sms(phone: str, code: str) -> bool:
@@ -51,6 +60,7 @@ def _send_otp_sms(phone: str, code: str) -> bool:
 
 
 @otp_bp.route("/request-otp", methods=["POST"])
+@limiter.limit("5/minute")
 def request_otp():
     data     = request.get_json(silent=True) or {}
     phone    = normalize_phone_number(data.get("phone_number", ""))
@@ -85,8 +95,7 @@ def request_otp():
 
     _send_otp_sms(phone, code)
 
-    import os
-    is_sandbox = os.getenv("AT_USERNAME", "sandbox") == "sandbox"
+    is_sandbox = _dev_otp_visible()
 
     response = {
         "message": "OTP sent. Valid for 5 minutes.",
@@ -100,6 +109,7 @@ def request_otp():
 
 
 @otp_bp.route("/verify-otp", methods=["POST"])
+@limiter.limit("10/minute")
 def verify_otp():
     data   = request.get_json(silent=True) or {}
     otp_id = data.get("otp_id")
@@ -148,6 +158,7 @@ def verify_otp():
 
 
 @otp_bp.route("/resend-otp", methods=["POST"])
+@limiter.limit("5/minute")
 def resend_otp():
     data   = request.get_json(silent=True) or {}
     otp_id = data.get("otp_id")
@@ -181,8 +192,7 @@ def resend_otp():
 
     _send_otp_sms(user.phone_number, code)
 
-    import os
-    is_sandbox = os.getenv("AT_USERNAME", "sandbox") == "sandbox"
+    is_sandbox = _dev_otp_visible()
 
     response = {"message": "New OTP sent.", "otp_id": new_otp.id}
     if is_sandbox:
