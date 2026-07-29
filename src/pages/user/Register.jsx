@@ -3,6 +3,49 @@ import { useNavigate } from "react-router-dom";
 import api from "../../api/axios";
 import { KENYA_COUNTIES } from "../../constants/counties";
 import { TOWNS_BY_COUNTY } from "../../constants/towns";
+import {
+  EDUCATION_LEVELS,
+  MARITAL_STATUSES,
+  RELIGIONS,
+  ETHNICITIES,
+  PROFESSIONS,
+} from "../../constants/profileOptions";
+
+// A <select> of preset options with a manual-entry fallback for anything
+// not listed, so the field never blocks someone whose answer isn't covered.
+function SelectOrOther({ options, value, onChange, placeholder }) {
+  const [isOther, setIsOther] = useState(value !== "" && !options.includes(value));
+
+  if (isOther) {
+    return (
+      <input
+        placeholder={`Type your ${placeholder.toLowerCase()}`}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300"
+      />
+    );
+  }
+
+  return (
+    <select
+      value={value}
+      onChange={(e) => {
+        if (e.target.value === "__other__") {
+          setIsOther(true);
+          onChange("");
+        } else {
+          onChange(e.target.value);
+        }
+      }}
+      className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300 text-gray-700"
+    >
+      <option value="">{placeholder}</option>
+      {options.map((o) => <option key={o} value={o}>{o}</option>)}
+      <option value="__other__">Other (type manually)</option>
+    </select>
+  );
+}
 
 function Register() {
   const navigate = useNavigate();
@@ -297,21 +340,36 @@ function Register() {
         {/* Step 2 - Details */}
         {step === 2 && (
           <div className="space-y-4">
-            <input name="education" placeholder="Education Level"
-              value={form.education} onChange={handleChange}
-              className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300" />
-            <input name="profession" placeholder="Profession"
-              value={form.profession} onChange={handleChange}
-              className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300" />
-            <input name="maritalStatus" placeholder="Marital Status"
-              value={form.maritalStatus} onChange={handleChange}
-              className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300" />
-            <input name="religion" placeholder="Religion"
-              value={form.religion} onChange={handleChange}
-              className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300" />
-            <input name="ethnicity" placeholder="Ethnicity"
-              value={form.ethnicity} onChange={handleChange}
-              className="w-full border rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-pink-300" />
+            <SelectOrOther
+              options={EDUCATION_LEVELS}
+              value={form.education}
+              onChange={(v) => setForm({ ...form, education: v })}
+              placeholder="Education Level"
+            />
+            <SelectOrOther
+              options={PROFESSIONS}
+              value={form.profession}
+              onChange={(v) => setForm({ ...form, profession: v })}
+              placeholder="Profession"
+            />
+            <SelectOrOther
+              options={MARITAL_STATUSES}
+              value={form.maritalStatus}
+              onChange={(v) => setForm({ ...form, maritalStatus: v })}
+              placeholder="Marital Status"
+            />
+            <SelectOrOther
+              options={RELIGIONS}
+              value={form.religion}
+              onChange={(v) => setForm({ ...form, religion: v })}
+              placeholder="Religion"
+            />
+            <SelectOrOther
+              options={ETHNICITIES}
+              value={form.ethnicity}
+              onChange={(v) => setForm({ ...form, ethnicity: v })}
+              placeholder="Ethnicity"
+            />
             <button onClick={handleStep2} disabled={loading}
               className="w-full bg-pink-600 text-white py-3 rounded-lg font-bold hover:bg-pink-700 transition disabled:opacity-60">
               {loading ? "Saving..." : "Next"}
