@@ -8,6 +8,7 @@ function Dashboard() {
     users: 0,
     smsLogs: 0,
     smsOutbox: 0,
+    supportUnread: 0,
   });
   
   useEffect(() => {
@@ -22,10 +23,15 @@ function Dashboard() {
         const usersRes = await api.get("/users");
         const logsRes = await api.get("/sms/logs");
         const outboxRes = await api.get("/sms/outbox");
+        const supportRes = await api.get("/admin/support/threads");
+        const supportUnread = (supportRes.data || []).reduce(
+          (sum, t) => sum + (t.unread_count || 0), 0
+        );
         setStats({
           users: usersRes.data.total || usersRes.data.length,
           smsLogs: logsRes.data.length,
           smsOutbox: outboxRes.data.length,
+          supportUnread,
         });
       } catch (err) {
         console.error("Failed to fetch stats", err);
@@ -93,6 +99,20 @@ function Dashboard() {
           >
             <h3 className="text-lg font-bold text-gray-700 mb-2">📨 SMS Logs</h3>
             <p className="text-gray-500">View all incoming and outgoing SMS messages.</p>
+          </div>
+          <div
+            onClick={() => navigate("/admin/support")}
+            className="bg-white rounded-xl shadow p-6 cursor-pointer hover:shadow-lg transition border hover:border-pink-300 relative"
+          >
+            <h3 className="text-lg font-bold text-gray-700 mb-2">
+              💬 Support Messages
+              {stats.supportUnread > 0 && (
+                <span className="ml-2 bg-red-500 text-white text-xs font-bold px-2 py-0.5 rounded-full align-middle">
+                  {stats.supportUnread}
+                </span>
+              )}
+            </h3>
+            <p className="text-gray-500">Read and reply to "Chat with us" messages from users.</p>
           </div>
         </div>
       </div>

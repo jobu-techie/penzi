@@ -228,6 +228,135 @@ function WalletWidget({ coins, onTopUp }) {
   );
 }
 
+// ── Support Chat Widget ("Chat with us") ───────────────────────────────────────
+function SupportChatWidget({ phone }) {
+  const [open, setOpen] = useState(false);
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState("");
+  const [sending, setSending] = useState(false);
+  const [unread, setUnread] = useState(0);
+  const pollRef = useRef(null);
+  const bottomRef = useRef(null);
+
+  const fetchUnread = useCallback(async () => {
+    if (!phone) return;
+    try {
+      const res = await api.get(`/support/unread-count/${phone}`);
+      setUnread(res.data.unread_count || 0);
+    } catch { }
+  }, [phone]);
+
+  const fetchMessages = useCallback(async () => {
+    if (!phone) return;
+    try {
+      const res = await api.get(`/support/messages/${phone}`);
+      setMessages(res.data);
+      setUnread(0); // viewing the thread marks admin messages as read server-side
+    } catch { }
+  }, [phone]);
+
+  useEffect(() => {
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 15000);
+    return () => clearInterval(interval);
+  }, [fetchUnread]);
+
+  useEffect(() => {
+    if (!open) return;
+    fetchMessages();
+    pollRef.current = setInterval(fetchMessages, 5000);
+    return () => clearInterval(pollRef.current);
+  }, [open, fetchMessages]);
+
+  useEffect(() => {
+    if (open) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, open]);
+
+  const sendMessage = async () => {
+    const content = input.trim();
+    if (!content || sending) return;
+    setSending(true);
+    setInput("");
+    try {
+      const res = await api.post("/support/send", { phone_number: phone, content });
+      setMessages(prev => [...prev, res.data]);
+    } catch {
+      setInput(content); // restore on failure so the user doesn't lose their message
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <>
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="fixed bottom-5 right-5 z-40 bg-pink-600 text-white w-14 h-14 rounded-full shadow-lg flex items-center justify-center hover:bg-pink-700 transition"
+        title="Chat with us"
+      >
+        {open ? (
+          <span className="text-2xl leading-none">×</span>
+        ) : (
+          <>
+            <span className="text-2xl">💬</span>
+            {unread > 0 && (
+              <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs w-5 h-5 rounded-full flex items-center justify-center font-bold">
+                {unread}
+              </span>
+            )}
+          </>
+        )}
+      </button>
+
+      {open && (
+        <div
+          className="fixed bottom-24 right-5 z-40 w-80 max-w-[calc(100vw-2.5rem)] bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col"
+          style={{ height: "60vh", maxHeight: 480 }}
+        >
+          <div className="bg-pink-600 text-white p-4 flex-shrink-0">
+            <p className="font-bold">Chat with us</p>
+            <p className="text-pink-100 text-xs">Ran into an issue? Send us a message.</p>
+          </div>
+          <div className="flex-1 overflow-y-auto p-3 space-y-2 bg-gray-50">
+            {messages.length === 0 ? (
+              <p className="text-gray-400 text-sm text-center mt-6">No messages yet — say hello 👋</p>
+            ) : (
+              messages.map((m) => (
+                <div key={m.id} className={`flex ${m.sender === "user" ? "justify-end" : "justify-start"}`}>
+                  <div
+                    className={`max-w-[75%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap ${
+                      m.sender === "user" ? "bg-pink-600 text-white" : "bg-white border text-gray-700"
+                    }`}
+                  >
+                    {m.content}
+                  </div>
+                </div>
+              ))
+            )}
+            <div ref={bottomRef} />
+          </div>
+          <div className="p-3 border-t flex gap-2 flex-shrink-0">
+            <input
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+              placeholder="Type a message..."
+              className="flex-1 border rounded-full px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-pink-300"
+            />
+            <button
+              onClick={sendMessage}
+              disabled={sending || !input.trim()}
+              className="bg-pink-600 text-white rounded-full w-10 h-10 flex-shrink-0 flex items-center justify-center disabled:opacity-50"
+            >
+              ➤
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // ── Chat Thread List Item ─────────────────────────────────────────────────────
 function ChatThreadItem({ thread, onClick }) {
   const { other_user, last_message, unread_count, interest_status } = thread;
@@ -1526,6 +1655,8 @@ function Matches() {
           </div>
         )}
       </div>
+
+      <SupportChatWidget phone={phone} />
     </div>
   );
 }
