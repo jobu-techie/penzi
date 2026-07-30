@@ -823,3 +823,102 @@ def admin_set_password(user_id):
     user.set_password(data["password"])
     db.session.commit()
     return jsonify({"message": "Password updated successfully"}), 200
+
+
+# ─── ADMIN SUPPORT INBOX ─────────────────────────────────────────────────────
+
+@bp.route('/admin/support/threads', methods=['GET'])
+@require_admin
+def admin_support_threads():
+    from app.models import User
+    from app.models_support import SupportMessage
+    from app import db
+
+    user_ids = [
+        row[0] for row in
+        db.session.query(SupportMessage.user_id).distinct().all()
+    ]
+
+    threads = []
+    for uid in user_ids:
+        user = User.query.get(uid)
+        if not user:
+            continue
+
+        last_msg = (
+            SupportMessage.query
+            .filter_by(user_id=uid)
+            .order_by(SupportMessage.created_at.desc())
+            .first()
+        )
+        unread = SupportMessage.query.filter_by(
+            user_id=uid, sender="user", is_read=False
+        ).count()
+
+        threads.append({
+            "user_id": uid,
+            "user_name": user.name,
+            "user_phone": user.phone_number,
+            "last_message": last_msg.to_dict() if last_msg else None,
+            "unread_count": unread,
+        })
+
+    threads.sort(
+        key=lambda t: t["last_message"]["created_at"] if t["last_message"] else "",
+        reverse=True,
+    )
+    return jsonify(threads), 200
+
+
+@bp.route('/admin/support/messages/<int:user_id>', methods=['GET'])
+@require_admin
+def admin_support_messages(user_id):
+    from app.models import User
+    from app.models_support import SupportMessage
+    from app import db
+
+    user = User.query.get_or_404(user_id)
+
+    SupportMessage.query.filter_by(
+        user_id=user_id, sender="user", is_read=False
+    ).update({"is_read": True})
+    db.session.commit()
+
+    messages = (
+        SupportMessage.query
+        .filter_by(user_id=user_id)
+        .order_by(SupportMessage.created_at.asc())
+        .all()
+    )
+    return jsonify({
+        "user": {"id": user.id, "name": user.name, "phone_number": user.phone_number},
+        "messages": [m.to_dict() for m in messages],
+    }), 200
+
+
+@bp.route('/admin/support/send', methods=['POST'])
+@require_admin
+def admin_support_send():
+    from app.models import User
+    from app.models_support import SupportMessage
+    from app import db
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"error": "Invalid request"}), 400
+
+    user_id = data.get("user_id")
+    content = (data.get("content") or "").strip()
+
+    if not user_id or not content:
+        return jsonify({"error": "user_id and content are required"}), 400
+    if len(content) > 1000:
+        return jsonify({"error": "Message too long (max 1000 characters)"}), 400
+
+    user = User.query.get_or_404(user_id)
+
+    msg = SupportMessage(user_id=user.id, sender="admin", content=content, is_read=False)
+    db.session.add(msg)
+    db.session.commit()
+
+    return jsonify(msg.to_dict()), 201

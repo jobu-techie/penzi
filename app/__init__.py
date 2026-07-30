@@ -19,8 +19,9 @@ def create_app():
     with app.app_context():
         from app import models          # your main models (User, InterestRequest, etc.)
         from app import models_chat     # ChatMessage
-        from app import models_subscription 
+        from app import models_subscription
         from app.models_otp import OTP
+        from app import models_support  # SupportMessage
 
     from app.routes import bp
     app.register_blueprint(bp)
@@ -30,9 +31,12 @@ def create_app():
 
     from app.routes_subscription import sub_bp
     app.register_blueprint(sub_bp)
-    
+
     from app.routes_otp import otp_bp
     app.register_blueprint(otp_bp)
+
+    from app.routes_support import support_bp
+    app.register_blueprint(support_bp)
 
     @app.cli.command("seed-plans")
     def seed_plans_cmd():
