@@ -512,6 +512,165 @@ const cw = StyleSheet.create({
 });
 
 
+// ── Support Chat Widget ("Chat with us") ───────────────────────────────────────
+function SupportChatWidget({ phone }) {
+  const [open, setOpen] = useState(false);
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState('');
+  const [sending, setSending] = useState(false);
+  const [unread, setUnread] = useState(0);
+  const pollRef = useRef(null);
+  const flatRef = useRef(null);
+
+  const fetchUnread = useCallback(async () => {
+    if (!phone) return;
+    try {
+      const res = await api.get(`/support/unread-count/${phone}`);
+      setUnread(res.data.unread_count || 0);
+    } catch {}
+  }, [phone]);
+
+  const fetchMessages = useCallback(async () => {
+    if (!phone) return;
+    try {
+      const res = await api.get(`/support/messages/${phone}`);
+      setMessages(res.data);
+      setUnread(0);
+    } catch {}
+  }, [phone]);
+
+  useEffect(() => {
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 15000);
+    return () => clearInterval(interval);
+  }, [fetchUnread]);
+
+  useEffect(() => {
+    if (!open) return;
+    fetchMessages();
+    pollRef.current = setInterval(fetchMessages, 5000);
+    return () => clearInterval(pollRef.current);
+  }, [open, fetchMessages]);
+
+  const sendMessage = async () => {
+    const content = input.trim();
+    if (!content || sending) return;
+    setSending(true);
+    setInput('');
+    try {
+      const res = await api.post('/support/send', { phone_number: phone, content });
+      setMessages(prev => [...prev, res.data]);
+    } catch {
+      setInput(content);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <>
+      <TouchableOpacity style={sc.bubble} onPress={() => setOpen(true)}>
+        <Text style={sc.bubbleIcon}>💬</Text>
+        {unread > 0 && (
+          <View style={sc.bubbleBadge}>
+            <Text style={sc.bubbleBadgeText}>{unread}</Text>
+          </View>
+        )}
+      </TouchableOpacity>
+
+      <Modal visible={open} animationType="slide" transparent onRequestClose={() => setOpen(false)}>
+        <View style={sc.overlay}>
+          <KeyboardAvoidingView
+            style={sc.sheet}
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            keyboardVerticalOffset={40}
+          >
+            <View style={sc.header}>
+              <View>
+                <Text style={sc.headerTitle}>Chat with us</Text>
+                <Text style={sc.headerSub}>Ran into an issue? Send us a message.</Text>
+              </View>
+              <TouchableOpacity onPress={() => setOpen(false)} style={sc.closeBtn}>
+                <Text style={sc.closeX}>×</Text>
+              </TouchableOpacity>
+            </View>
+
+            <FlatList
+              ref={flatRef}
+              data={messages}
+              keyExtractor={m => String(m.id)}
+              style={{ maxHeight: 380 }}
+              contentContainerStyle={{ padding: 12 }}
+              onContentSizeChange={() => flatRef.current?.scrollToEnd({ animated: true })}
+              ListEmptyComponent={
+                <View style={{ alignItems: 'center', paddingTop: 30 }}>
+                  <Text style={{ color: COLORS.gray400 }}>No messages yet — say hello 👋</Text>
+                </View>
+              }
+              renderItem={({ item: m }) => (
+                <View style={[sc.msgRow, m.sender === 'user' ? sc.msgRowMe : sc.msgRowThem]}>
+                  <View style={[sc.bubbleMsg, m.sender === 'user' ? sc.bubbleMe : sc.bubbleThem]}>
+                    <Text style={m.sender === 'user' ? sc.msgTextMe : sc.msgTextThem}>{m.content}</Text>
+                  </View>
+                </View>
+              )}
+            />
+
+            <View style={sc.inputBar}>
+              <TextInput
+                style={sc.input}
+                value={input}
+                onChangeText={setInput}
+                placeholder="Type a message..."
+                placeholderTextColor={COLORS.gray400}
+                maxLength={1000}
+                multiline
+              />
+              <TouchableOpacity
+                style={[sc.sendBtn, (!input.trim() || sending) && { opacity: 0.5 }]}
+                onPress={sendMessage}
+                disabled={!input.trim() || sending}
+              >
+                {sending
+                  ? <ActivityIndicator color={COLORS.white} size="small" />
+                  : <Text style={sc.sendIcon}>➤</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          </KeyboardAvoidingView>
+        </View>
+      </Modal>
+    </>
+  );
+}
+
+const sc = StyleSheet.create({
+  bubble:        { position: 'absolute', bottom: 24, right: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center', zIndex: 50, ...SHADOWS.card },
+  bubbleIcon:    { fontSize: 24 },
+  bubbleBadge:   { position: 'absolute', top: -2, right: -2, backgroundColor: '#EF4444', minWidth: 20, height: 20, borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 },
+  bubbleBadgeText: { color: COLORS.white, fontSize: 11, fontWeight: '700' },
+  overlay:       { flex: 1, backgroundColor: 'rgba(0,0,0,0.6)', justifyContent: 'flex-end' },
+  sheet:         { backgroundColor: COLORS.white, borderTopLeftRadius: 24, borderTopRightRadius: 24, overflow: 'hidden' },
+  header:        { backgroundColor: COLORS.primary, padding: 18, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
+  headerTitle:   { color: COLORS.white, fontSize: 16, fontWeight: '800' },
+  headerSub:     { color: 'rgba(255,255,255,0.75)', fontSize: 11, marginTop: 2 },
+  closeBtn:      { width: 30, height: 30, borderRadius: 15, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
+  closeX:        { color: COLORS.white, fontSize: 20, fontWeight: '700', lineHeight: 22 },
+  msgRow:        { marginBottom: 8, flexDirection: 'row' },
+  msgRowMe:      { justifyContent: 'flex-end' },
+  msgRowThem:    { justifyContent: 'flex-start' },
+  bubbleMsg:     { maxWidth: '75%', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 18 },
+  bubbleMe:      { backgroundColor: COLORS.primary, borderBottomRightRadius: 4 },
+  bubbleThem:    { backgroundColor: COLORS.gray50, borderBottomLeftRadius: 4, borderWidth: 1, borderColor: COLORS.gray200 },
+  msgTextMe:     { color: COLORS.white, fontSize: 14 },
+  msgTextThem:   { color: COLORS.gray800, fontSize: 14 },
+  inputBar:      { flexDirection: 'row', alignItems: 'flex-end', padding: 12, borderTopWidth: 1, borderTopColor: COLORS.gray100, gap: 10 },
+  input:         { flex: 1, borderWidth: 1.5, borderColor: COLORS.gray200, borderRadius: 22, paddingHorizontal: 16, paddingVertical: 10, fontSize: 14, color: COLORS.gray800, backgroundColor: COLORS.gray50, maxHeight: 100 },
+  sendBtn:       { width: 44, height: 44, borderRadius: 22, backgroundColor: COLORS.primary, alignItems: 'center', justifyContent: 'center' },
+  sendIcon:      { color: COLORS.white, fontSize: 18 },
+});
+
+
 // ── Main MatchesScreen ───────────────────────────────────────────────────────
 export default function MatchesScreen({ navigation }) {
   const [currentUser, setCurrentUser] = useState(null);
@@ -1507,6 +1666,8 @@ const fetchSubscription = useCallback(async () => {
 
         </ScrollView>
       )}
+
+      <SupportChatWidget phone={phone} />
     </SafeAreaView>
   );
 }
