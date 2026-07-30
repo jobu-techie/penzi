@@ -43,11 +43,27 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
-      // Token expired or missing — clear and redirect to login
-      localStorage.removeItem('penzi_token');
-      localStorage.removeItem('penzi_user');
-      window.location.href = '/login';
+    const status = error.response?.status;
+    const isAdmin = error.config?.url?.includes('/admin/');
+
+    // Flask-JWT-Extended returns 401 for an expired-but-well-formed token,
+    // and 422 for one it can't even decode (missing/garbled/corrupted) --
+    // both mean "you're not really logged in", so both need to bounce back
+    // to a login screen instead of failing silently.
+    const isAuthFailure = status === 401 || (isAdmin && status === 422);
+
+    if (isAuthFailure) {
+      if (isAdmin) {
+        // Admin token expired or missing — clear only the admin session
+        // and send back to the admin login, not the regular user login.
+        localStorage.removeItem('penzi_admin_token');
+        window.location.href = '/admin/login';
+      } else {
+        // Regular user token expired or missing — clear and redirect to login
+        localStorage.removeItem('penzi_token');
+        localStorage.removeItem('penzi_user');
+        window.location.href = '/login';
+      }
     }
     return Promise.reject(error);
   }
