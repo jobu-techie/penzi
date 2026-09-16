@@ -1,31 +1,26 @@
 pipeline {
     agent any
     environment {
-        BACKEND_REPO = 'https://github.com/jobu-techie/penzi.git'
-        FRONTEND_REPO = 'https://github.com/jobu-techie/penzi-frontend.git'
+        REPO = 'https://github.com/jobu-techie/penzi.git'
         DEPLOY_DIR = '/opt/penzi-deploy'
+        // Compose's own ${VAR} interpolation (used by the db service) only
+        // auto-discovers a .env next to the compose file; ours lives in
+        // backend/ instead, so every docker compose call below passes this
+        // explicitly rather than duplicating the file at the repo root.
+        COMPOSE_ENV_FILE = 'backend/.env'
     }
     stages {
-        stage('Clone Repositories') {
+        stage('Clone Repository') {
             steps {
                 withCredentials([usernamePassword(credentialsId: 'github-credentials', usernameVariable: 'GIT_USER', passwordVariable: 'GIT_TOKEN')]) {
                     sh '''
                         mkdir -p ${DEPLOY_DIR}
-                        # Clone or pull backend
                         if [ -d "${DEPLOY_DIR}/penzi/.git" ]; then
-                            echo "Pulling latest backend..."
+                            echo "Pulling latest..."
                             cd ${DEPLOY_DIR}/penzi && git pull https://${GIT_USER}:${GIT_TOKEN}@github.com/jobu-techie/penzi.git main
                         else
-                            echo "Cloning backend..."
+                            echo "Cloning..."
                             git clone https://${GIT_USER}:${GIT_TOKEN}@github.com/jobu-techie/penzi.git ${DEPLOY_DIR}/penzi
-                        fi
-                        # Clone or pull frontend
-                        if [ -d "${DEPLOY_DIR}/penzi-frontend/.git" ]; then
-                            echo "Pulling latest frontend..."
-                            cd ${DEPLOY_DIR}/penzi-frontend && git pull https://${GIT_USER}:${GIT_TOKEN}@github.com/jobu-techie/penzi-frontend.git main
-                        else
-                            echo "Cloning frontend..."
-                            git clone https://${GIT_USER}:${GIT_TOKEN}@github.com/jobu-techie/penzi-frontend.git ${DEPLOY_DIR}/penzi-frontend
                         fi
                     '''
                 }
@@ -35,7 +30,7 @@ pipeline {
             steps {
                 withCredentials([file(credentialsId: 'penzi-env-file', variable: 'ENV_FILE')]) {
                     sh '''
-                        cp ${ENV_FILE} ${DEPLOY_DIR}/penzi/.env
+                        cp ${ENV_FILE} ${DEPLOY_DIR}/penzi/backend/.env
                         echo ".env file copied successfully"
                     '''
                 }
@@ -46,9 +41,9 @@ pipeline {
                 sh '''
                     cd ${DEPLOY_DIR}/penzi
                     # Stop existing containers
-                    docker compose down || true
+                    docker compose --env-file ${COMPOSE_ENV_FILE} down || true
                     # Build and start all services
-                    docker compose up -d --build
+                    docker compose --env-file ${COMPOSE_ENV_FILE} up -d --build
                     echo "Deployment complete!"
                 '''
             }
@@ -60,8 +55,8 @@ pipeline {
                     sleep 15
 
                     # Find the backend container name
-                    BACKEND_CONTAINER=$(docker compose -f ${DEPLOY_DIR}/penzi/docker-compose.yml ps -q backend 2>/dev/null || \
-                                        docker ps --filter "name=penzi" --filter "name=backend" -q | head -1)
+                    BACKEND_CONTAINER=$(docker compose -f ${DEPLOY_DIR}/penzi/docker-compose.yml --env-file ${DEPLOY_DIR}/penzi/${COMPOSE_ENV_FILE} ps -q api 2>/dev/null || \
+                                        docker ps --filter "name=penzi-api" -q | head -1)
 
                     if [ -z "$BACKEND_CONTAINER" ]; then
                         echo "ERROR: Could not find backend container"
@@ -82,7 +77,7 @@ pipeline {
             steps {
                 sh '''
                     sleep 5
-                    docker compose -f ${DEPLOY_DIR}/penzi/docker-compose.yml ps
+                    docker compose -f ${DEPLOY_DIR}/penzi/docker-compose.yml --env-file ${DEPLOY_DIR}/penzi/${COMPOSE_ENV_FILE} ps
                 '''
             }
         }
@@ -93,7 +88,7 @@ pipeline {
         }
         failure {
             echo 'Deployment failed! Check logs above.'
-            sh 'docker compose -f ${DEPLOY_DIR}/penzi/docker-compose.yml logs --tail=50 || true'
+            sh 'docker compose -f ${DEPLOY_DIR}/penzi/docker-compose.yml --env-file ${DEPLOY_DIR}/penzi/${COMPOSE_ENV_FILE} logs --tail=50 || true'
         }
     }
 }
