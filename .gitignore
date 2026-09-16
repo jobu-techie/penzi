@@ -1,14 +1,5 @@
+# Root-level ignores. Each of backend/, frontend/, and mobile/ has its own
+# .gitignore scoped to that stack's own tooling.
+.claude/
 venv/
-__pycache__/
-*.pyc
-*.pyo
-*.pyd
-.env
-*.backup
-*.save
-instance/
-*.backup
-*.save.backup
-nohup.out
-.postman/
-postman/
+.venv/
